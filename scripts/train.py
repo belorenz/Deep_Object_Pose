@@ -271,11 +271,11 @@ def loadjson(path, objectsofinterest, img):
         data = json.load(data_file)
     # print (path)
     pointsBelief = []
-    boxes = []
+    #boxes = []
     points_keypoints_3d = []
     points_keypoints_2d = []
-    pointsBoxes = []
-    poses = []
+    #pointsBoxes = []
+    #poses = []
     centroids = []
 
     translations = []
@@ -288,19 +288,19 @@ def loadjson(path, objectsofinterest, img):
            not objectsofinterest in info['class'].lower():
             continue 
         
-        box = info['bounding_box']
-        boxToAdd = []
+        #box = info['bounding_box']
+        #boxToAdd = []
 
-        boxToAdd.append(float(box['top_left'][0]))
-        boxToAdd.append(float(box['top_left'][1]))
-        boxToAdd.append(float(box["bottom_right"][0]))
-        boxToAdd.append(float(box['bottom_right'][1]))
-        boxes.append(boxToAdd)
+        #boxToAdd.append(float(box['top_left'][0]))
+        #boxToAdd.append(float(box['top_left'][1]))
+        #boxToAdd.append(float(box["bottom_right"][0]))
+        #boxToAdd.append(float(box['bottom_right'][1]))
+        #boxes.append(boxToAdd)
 
-        boxpoint = [(boxToAdd[0],boxToAdd[1]),(boxToAdd[0],boxToAdd[3]),
-                    (boxToAdd[2],boxToAdd[1]),(boxToAdd[2],boxToAdd[3])]
+        #boxpoint = [(boxToAdd[0],boxToAdd[1]),(boxToAdd[0],boxToAdd[3]),
+        #            (boxToAdd[2],boxToAdd[1]),(boxToAdd[2],boxToAdd[3])]
 
-        pointsBoxes.append(boxpoint)
+        #pointsBoxes.append(boxpoint)
         
         # 3dbbox with belief maps
         points3d = []

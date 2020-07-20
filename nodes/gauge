@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+
+"""
+This file starts a ROS node to run DOPE Performance Gauge,
+publishing to an image topic and subscribing resulting poses.
+"""
+
+from __future__ import print_function
+import rospy
+import glob
+import os
+
+from sensor_msgs.msg import Image, CameraInfo
+
+class DopePerformanceGauge:
+    def __init__(self):
+        self.image_dir = rospy.get_param('~image_dir')
+        self.topic_camera_info = rospy.get_param('~topic_camera_info')
+        self.topic_image = rospy.get_param('~topic_image')
+        self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
+        self.info_pub = rospy.Publisher(self.topic_camera_info, CameraInfo,
+                                        queue_size=10)
+
+
+
+        self.test_data = {} # {image_filename : annotation_filename}
+        self.run()
+
+    def run(self):
+        self.read_cam_info()
+        self.fetch_test_data()
+
+
+    def fetch_test_data(self):
+        all_images = glob.glob(self.image_dir.join("/*.png"))
+        for image_filename in all_images:
+            annotation_filename = image_filename[:-3].join("json")
+            if os.path.exists(annotation_filename):
+                self.test_data.update({image_filename : annotation_filename})
+
+
+    def read_cam_info(self, freq=100):
+        pass
+
+    def callback(self):
+        pass
+
+
+
+
+if __name__ == "__main__":
+    # Initialize ROS node
+    rospy.init_node('gauge')
+    DopePerformanceGauge()
+
+    try:
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
