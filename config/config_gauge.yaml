@@ -1,5 +1,5 @@
 topic_camera_info: "/dope/camera_info"
 topic_image: "/dope/image"
-image_dir: "package://"
+image_dir: "/media/benjamin/Liesbet/MultiCarPose_v0.9/eval"
 graph: "package://dope/weights/car.pth"
-camera_info_url : "package://dope/config/camera_info.yaml"
+camera_info_url : "package://dope/config/camera_info_gauge.yaml"

@@ -16,7 +16,8 @@ from sensor_msgs.msg import Image, CameraInfo
 class DopePerformanceGauge:
 
     def __init__(self):
-        self.image_dir = rospy.get_param('~image_dir')
+        #self.image_dir = rospy.get_param('~image_dir',)
+        self.image_dir = '/media/benjamin/Liesbeth/MultiCarPose_v0.9/eval'
         self.topic_camera_info = rospy.get_param('~topic_camera_info', '/dope/camera_info')
         self.topic_image = rospy.get_param('~topic_image', '/dope/image')
         self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
@@ -32,40 +33,45 @@ class DopePerformanceGauge:
         self.fetch_test_data()
 
         # todo
-        self.camera_info.header = image.header
-        self.info_pub.publish(self.camera_info)
+        #self.camera_info.header = image.header
+        #self.info_pub.publish(self.camera_info)
 
 
     def fetch_test_data(self):
-        all_images = glob.glob(self.image_dir.join("/*.png"))
+        all_images = glob.glob(self.image_dir + "/*.png")
         for image_filename in all_images:
-            annotation_filename = image_filename[:-3].join("json")
+            annotation_filename = image_filename[:-3] + "json"
             if os.path.exists(annotation_filename):
                 self.test_data.update({image_filename : annotation_filename})
 
 
     def read_cam_info(self, freq=100):
-        # todo test this code, just copied it from camera_node
-        self.camera_namespace = rospy.get_param('camera', 'dope/webcam')
-        self.camera_info_url = rospy.get_param('~camera_info_url')
-        self.cam_index = 0
-        self.info_manager = CameraInfoManager(cname='dope_webcam_{}'.format(
-            self.cam_index), namespace=self.camera_namespace)
+        camera_namespace = rospy.get_param('camera', 'dope/webcam')
+        camera_info_url = rospy.get_param('~camera_info_url',
+                                               'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml')
+        self.info_manager = CameraInfoManager(cname='dope_webcam_{}'.format(0),
+                                         namespace=camera_namespace)
+        try:
+            if not self.info_manager.setURL(camera_info_url):
+                raise RuntimeError('Camera info URL invalid: %s', camera_info_url)
+        except KeyError:
+            # we don't have a camera_info_url, so we'll keep the
+            # default ('file://${ROS_HOME}/camera_info/${NAME}.yaml')
+            pass
+
         self.info_manager.loadCameraInfo()
         if not self.info_manager.isCalibrated():
-            rospy.logwarn('Camera is not calibrated, please supply a valid camera_info_url parameter!')
-
+            raise RuntimeError('Camera is not calibrated, please supply a valid camera_info_url parameter!')
         self.camera_info = self.info_manager.getCameraInfo()
+
 
 def callback(self):
         pass
 
 
-
-
 if __name__ == "__main__":
     # Initialize ROS node
-    rospy.init_node('gauge')
+    rospy.init_node('dope_performance_gauge', anonymous=True)
     DopePerformanceGauge()
 
     try:
