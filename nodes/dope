@@ -275,6 +275,9 @@ class DopeNode(object):
                 pose_msg.pose.orientation.z = transformed_ori[2]
                 pose_msg.pose.orientation.w = transformed_ori[3]
 
+                cuboid_in_image = results['cuboid2d']
+                # todo
+
                 # Publish
                 self.pubs[m].publish(pose_msg)
                 self.pub_dimension[m].publish(str(dims))

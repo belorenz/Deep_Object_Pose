@@ -6,12 +6,25 @@ publishing to an image topic and subscribing resulting poses.
 """
 
 from __future__ import print_function
+
+import time
+import cv2
 import rospy
 import glob
 import os
 
 from camera_info_manager import CameraInfoManager
 from sensor_msgs.msg import Image, CameraInfo
+from geometry_msgs.msg import PoseStamped
+from cv_bridge import CvBridge
+from std_msgs.msg import String
+from vision_msgs.msg import Detection3DArray
+
+try:
+    import queue
+except ImportError:
+    import Queue as queue
+
 
 class DopePerformanceGauge:
 
@@ -23,21 +36,53 @@ class DopePerformanceGauge:
         self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
         self.info_pub = rospy.Publisher(self.topic_camera_info, CameraInfo,
                                         queue_size=10)
-        self.camera_info = None
 
+        self.camera_info = None
         self.test_data = {} # {image_filename : annotation_filename}
-        self.run()
+
+        self.dimensions_que = queue.Queue()
+        self.pose_car_que = queue.Queue()
+        self.rgb_que = queue.Queue()
+        self.objects_que = queue.Queue()
+
+        self.sub_dimensions= rospy.Subscriber('/dope/dimensions_car', String,
+                                             self._msg_callback)
+        self.sub_pose = rospy.Subscriber('/dope/pose_car', PoseStamped,
+                                             self._msg_callback)
+        self.sub_rgb = rospy.Subscriber('/dope/rgb_points', Image,
+                                             self._msg_callback)
+        self.sub_objects = rospy.Subscriber('/dope/detected_objects', Detection3DArray,
+                                             self._msg_callback)
 
     def run(self):
-        self.read_cam_info()
-        self.fetch_test_data()
+        self._read_cam_info()
+        self._fetch_test_data()
 
-        # todo
-        #self.camera_info.header = image.header
-        #self.info_pub.publish(self.camera_info)
+        rate = rospy.Rate(15)
+
+        for i,(image_filename) in enumerate(self.test_data):
+            while self.rgb_que.qsize() >= 5:
+                rate.sleep()
+
+            image = cv2.imread(image_filename)
+            bridge = CvBridge()
+            image_message = bridge.cv2_to_imgmsg(image,
+                                                 encoding="passthrough")
+
+            image_message.header.frame_id = i
+            image_message.header.stamp = rospy.Time.now()
+            self.image_pub.publish(image_message)
+
+            self.camera_info.header = image.header
+            self.info_pub.publish(self.camera_info)
+
+            # evaluate messages in queues
+            
+
+            rate.sleep()
 
 
-    def fetch_test_data(self):
+    def _fetch_test_data(self):
         all_images = glob.glob(self.image_dir + "/*.png")
         for image_filename in all_images:
             annotation_filename = image_filename[:-3] + "json"
@@ -45,10 +90,11 @@ class DopePerformanceGauge:
                 self.test_data.update({image_filename : annotation_filename})
 
 
-    def read_cam_info(self, freq=100):
+    def _read_cam_info(self):
         camera_namespace = rospy.get_param('camera', 'dope/webcam')
+        alternative_cam_info_url = 'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml'
         camera_info_url = rospy.get_param('~camera_info_url',
-                                               'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml')
+                                          alternative_cam_info_url)
         self.info_manager = CameraInfoManager(cname='dope_webcam_{}'.format(0),
                                          namespace=camera_namespace)
         try:
@@ -64,15 +110,35 @@ class DopePerformanceGauge:
             raise RuntimeError('Camera is not calibrated, please supply a valid camera_info_url parameter!')
         self.camera_info = self.info_manager.getCameraInfo()
 
+    def _msg_callback(self, msg):
+        if type(msg) is Image:
+            self.rgb_que.put(msg)
+        elif type(msg) is String:
+            self.dimensions_que.put(msg)
+        elif type(msg) is PoseStamped:
+            self.pose_car_que.put(msg)
+        elif type(msg) is Detection3DArray:
+            self.objects_que.put(msg)
+        else:
+            raise RuntimeError('Message of unknown type received.')
 
-def callback(self):
+    def _rgb_callback(self, image):
+        # todo
+        pass
+
+    def _objects_callback(self, objects):
+        # todo
+        pass
+
+
+def _callback(self):
         pass
 
 
 if __name__ == "__main__":
     # Initialize ROS node
     rospy.init_node('dope_performance_gauge', anonymous=True)
-    DopePerformanceGauge()
+    DopePerformanceGauge().run()
 
     try:
         rospy.spin()
