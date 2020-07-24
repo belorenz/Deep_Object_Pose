@@ -16,9 +16,11 @@ import os
 from camera_info_manager import CameraInfoManager
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 from std_msgs.msg import String
 from vision_msgs.msg import Detection3DArray
+from collections import defaultdict
+
 
 try:
     import queue
@@ -29,8 +31,9 @@ except ImportError:
 class DopePerformanceGauge:
 
     def __init__(self):
-        #self.image_dir = rospy.get_param('~image_dir',)
-        self.image_dir = '/media/benjamin/Liesbeth/MultiCarPose_v0.9/eval'
+        self.image_dir = rospy.get_param('~image_dir',
+                                         '/media/benjamin/Liesbeth/MultiCarPose_v0.9/eval')
+        self.image_output_dir = rospy.get_param('~image_output_dir', '')
         self.topic_camera_info = rospy.get_param('~topic_camera_info', '/dope/camera_info')
         self.topic_image = rospy.get_param('~topic_image', '/dope/image')
         self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
@@ -40,19 +43,27 @@ class DopePerformanceGauge:
         self.camera_info = None
         self.test_data = {} # {image_filename : annotation_filename}
 
+        self.bridge = CvBridge()
+
         self.dimensions_que = queue.Queue()
         self.pose_car_que = queue.Queue()
         self.rgb_que = queue.Queue()
         self.objects_que = queue.Queue()
 
-        self.sub_dimensions= rospy.Subscriber('/dope/dimensions_car', String,
-                                             self._msg_callback)
-        self.sub_pose = rospy.Subscriber('/dope/pose_car', PoseStamped,
-                                             self._msg_callback)
+        #self.sub_dimensions= rospy.Subscriber('/dope/dimensions_car', String,
+        #                                     self._image_callback)
+        #self.sub_pose = rospy.Subscriber('/dope/pose_car', PoseStamped,
+        #                                     self._image_callback)
         self.sub_rgb = rospy.Subscriber('/dope/rgb_points', Image,
-                                             self._msg_callback)
-        self.sub_objects = rospy.Subscriber('/dope/detected_objects', Detection3DArray,
-                                             self._msg_callback)
+                                             self._image_callback)
+        #self.sub_objects = rospy.Subscriber('/dope/detected_objects',
+        # Detection3DArray,
+        #                                     self._image_callback)
+
+        #self.received_messages = defaultdict(lambda : {'rgb' : None,
+        #                                                 'objects': None,
+        #                                                 'poses': [],
+        #                                                 'dimensions': []} )
 
     def run(self):
         self._read_cam_info()
@@ -60,27 +71,33 @@ class DopePerformanceGauge:
 
         rate = rospy.Rate(15)
 
-        for i,(image_filename) in enumerate(self.test_data):
+        for image_filename in self.test_data:
             while self.rgb_que.qsize() >= 5:
                 rate.sleep()
 
             image = cv2.imread(image_filename)
-            bridge = CvBridge()
-            image_message = bridge.cv2_to_imgmsg(image,
+            image_message = self.bridge.cv2_to_imgmsg(image,
                                                  encoding="passthrough")
+            assert len(image_filename) > 10
+            image_id = image_filename[-10:-4]
 
-            image_message.header.frame_id = i
+            image_message.header.frame_id = image_id
             image_message.header.stamp = rospy.Time.now()
             self.image_pub.publish(image_message)
 
-            self.camera_info.header = image.header
+            self.camera_info.header = image_message.header
             self.info_pub.publish(self.camera_info)
 
-            # evaluate messages in queues
-            
+            # todo evaluate messages in queues
 
             rate.sleep()
 
+    def _assemble_output(self):
+        for image in list(self.rgb_que):
+            pass
+
+    def calculate_ground_truth(self):
+        pass
 
     def _fetch_test_data(self):
         all_images = glob.glob(self.image_dir + "/*.png")
@@ -92,9 +109,8 @@ class DopePerformanceGauge:
 
     def _read_cam_info(self):
         camera_namespace = rospy.get_param('camera', 'dope/webcam')
-        alternative_cam_info_url = 'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml'
         camera_info_url = rospy.get_param('~camera_info_url',
-                                          alternative_cam_info_url)
+                                          'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml')
         self.info_manager = CameraInfoManager(cname='dope_webcam_{}'.format(0),
                                          namespace=camera_namespace)
         try:
@@ -110,25 +126,28 @@ class DopePerformanceGauge:
             raise RuntimeError('Camera is not calibrated, please supply a valid camera_info_url parameter!')
         self.camera_info = self.info_manager.getCameraInfo()
 
-    def _msg_callback(self, msg):
-        if type(msg) is Image:
-            self.rgb_que.put(msg)
-        elif type(msg) is String:
-            self.dimensions_que.put(msg)
-        elif type(msg) is PoseStamped:
-            self.pose_car_que.put(msg)
-        elif type(msg) is Detection3DArray:
-            self.objects_que.put(msg)
+    def _image_callback(self, msg):
+        print("Received an image!")
+        try:
+            # Convert your ROS Image message to OpenCV2
+            cv2_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        except CvBridgeError, e:
+            print(e)
         else:
-            raise RuntimeError('Message of unknown type received.')
+            # Save your OpenCV2 image as a png
+            image_id = msg.header.id
+            cv2.imwrite(self.image_output_dir + '/' + str(image_id)+'.png',
+                        cv2_img)
+            rospy.sleep(0.2)
 
-    def _rgb_callback(self, image):
-        # todo
-        pass
-
-    def _objects_callback(self, objects):
-        # todo
-        pass
+        #elif type(msg) is String:
+        #    self.dimensions_que.put(msg)
+        #elif type(msg) is PoseStamped:
+        #    self.pose_car_que.put(msg)
+        #elif type(msg) is Detection3DArray:
+        #    self.objects_que.put(msg)
+        #else:
+        #    raise RuntimeError('Message of unknown type received.')
 
 
 def _callback(self):
