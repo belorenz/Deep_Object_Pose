@@ -78,13 +78,15 @@ class DopePerformanceGauge:
 
 
         for image_filename in self.test_data:
+            print('Waiting 15s for DOPE to start..')
+            time.sleep(15)
             while self.rgb_que.qsize() >= 5:
                 print('Incoming image que too long, waiting until it is '
                       'processed.')
                 rate.sleep()
 
 
-            image = cv2.imread(image_filename)
+            image = cv2.imread(image_filename, 'bgr8')
             image_message = self.bridge.cv2_to_imgmsg(image,
                                                  encoding="passthrough")
             assert len(image_filename) > 10
@@ -112,6 +114,7 @@ class DopePerformanceGauge:
     def _fetch_test_data(self):
         print('Fetching test_data..')
         all_images = glob.glob(self.image_dir + "/*.png")
+        assert len(all_images) > 0
         for image_filename in all_images:
             annotation_filename = image_filename[:-3] + "json"
             if os.path.exists(annotation_filename):
