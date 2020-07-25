@@ -142,7 +142,7 @@ class DopePerformanceGauge:
         self.camera_info = self.info_manager.getCameraInfo()
 
     def _image_callback(self, msg):
-        print("Received image {}".format(msg.header.id))
+        print("Received image {}".format(msg.header.frame_id))
         try:
             # Convert your ROS Image message to OpenCV2
             cv2_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
