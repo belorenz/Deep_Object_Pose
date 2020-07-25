@@ -77,9 +77,9 @@ class DopePerformanceGauge:
         rate = rospy.Rate(15)
 
 
+        print('Waiting 15s for DOPE to start..')
+        time.sleep(15)
         for image_filename in self.test_data:
-            print('Waiting 15s for DOPE to start..')
-            time.sleep(15)
             while self.rgb_que.qsize() >= 5:
                 print('Incoming image que too long, waiting until it is '
                       'processed.')
