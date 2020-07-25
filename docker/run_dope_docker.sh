@@ -3,6 +3,8 @@
 # Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
 # Full license terms provided in LICENSE.md file.
 
+DATASET_DIR='/media/lore_be/DOPE'
+
 CONTAINER_NAME=$1
 if [[ -z "${CONTAINER_NAME}" ]]; then
     CONTAINER_NAME=nvidia-dope-v1
@@ -21,14 +23,19 @@ if [[ -z "${CONTAINER_DIR}" ]]; then
     CONTAINER_DIR=/root/catkin_ws/src/dope
 fi
 
+
 echo "Container name     : ${CONTAINER_NAME}"
 echo "Host directory     : ${HOST_DIR}"
 echo "Container directory: ${CONTAINER_DIR}"
+
 DOPE_ID=`docker ps -aqf "name=^/${CONTAINER_NAME}$"`
 if [ -z "${DOPE_ID}" ]; then
     echo "Creating new DOPE docker container."
-    xhost +local:root
-    docker run --gpus all  -it --privileged --network=host -v ${HOST_DIR}:${CONTAINER_DIR}:rw -v /tmp/.X11-unix:/tmp/.X11-unix:rw --env="DISPLAY" --name=${CONTAINER_NAME} nvidia-dope:kinetic-v1 bash
+    #xhost +local:root
+    docker run --gpus all  -it --privileged --network=host -v
+    ${HOST_DIR}:${CONTAINER_DIR}:rw -v ${DATASET_DIR}:/root/catkin_ws/src/dope/
+     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
+    --env="DISPLAY" --name=${CONTAINER_NAME} nvidia-dope:kinetic-v1 bash
 else
     echo "Found DOPE docker container: ${DOPE_ID}."
     # Check if the container is already running and start if necessary.

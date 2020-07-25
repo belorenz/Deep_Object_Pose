@@ -34,11 +34,16 @@ class DopePerformanceGauge:
         self.image_dir = rospy.get_param('~image_dir',
                                          '/media/benjamin/Liesbeth/MultiCarPose_v0.9/eval')
         self.image_output_dir = rospy.get_param('~image_output_dir', '')
-        self.topic_camera_info = rospy.get_param('~topic_camera_info', '/dope/camera_info')
-        self.topic_image = rospy.get_param('~topic_image', '/dope/image')
+        self.topic_camera_info = rospy.get_param('~topic_camera_info',
+                                                 '/dope/gauge/camera_info')
+        self.topic_image = rospy.get_param('~topic_image',
+                                           '/dope/gauge/image_raw')
         self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
         self.info_pub = rospy.Publisher(self.topic_camera_info, CameraInfo,
                                         queue_size=10)
+
+        print('Publishing images to {}.'.format(self.topic_image))
+        print('Publishing camera_infos to {}.'.format(self.topic_camera_info))
 
         self.camera_info = None
         self.test_data = {} # {image_filename : annotation_filename}
@@ -71,6 +76,7 @@ class DopePerformanceGauge:
 
         rate = rospy.Rate(15)
 
+
         for image_filename in self.test_data:
             while self.rgb_que.qsize() >= 5:
                 rate.sleep()
@@ -83,10 +89,11 @@ class DopePerformanceGauge:
 
             image_message.header.frame_id = image_id
             image_message.header.stamp = rospy.Time.now()
-            self.image_pub.publish(image_message)
 
+            self.image_pub.publish(image_message)
             self.camera_info.header = image_message.header
             self.info_pub.publish(self.camera_info)
+            print('Published image {} and camera_info!'.format(image_id))
 
             # todo evaluate messages in queues
 
@@ -100,6 +107,7 @@ class DopePerformanceGauge:
         pass
 
     def _fetch_test_data(self):
+        print('Fetching test_data..')
         all_images = glob.glob(self.image_dir + "/*.png")
         for image_filename in all_images:
             annotation_filename = image_filename[:-3] + "json"
@@ -108,6 +116,7 @@ class DopePerformanceGauge:
 
 
     def _read_cam_info(self):
+        print('Read Camera_info..')
         camera_namespace = rospy.get_param('camera', 'dope/webcam')
         camera_info_url = rospy.get_param('~camera_info_url',
                                           'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml')
@@ -127,7 +136,7 @@ class DopePerformanceGauge:
         self.camera_info = self.info_manager.getCameraInfo()
 
     def _image_callback(self, msg):
-        print("Received an image!")
+        print("Received image {}".format(msg.header.id))
         try:
             # Convert your ROS Image message to OpenCV2
             cv2_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -156,6 +165,7 @@ def _callback(self):
 
 if __name__ == "__main__":
     # Initialize ROS node
+    print('Init Gauge..')
     rospy.init_node('dope_performance_gauge', anonymous=True)
     DopePerformanceGauge().run()
 
