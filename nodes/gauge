@@ -97,7 +97,8 @@ class DopePerformanceGauge:
             self.image_pub.publish(image_message)
             self.camera_info.header = image_message.header
             self.info_pub.publish(self.camera_info)
-            print('Published image {} and camera_info!'.format(image_id))
+            print('Published image {} and camera_info!'.format(
+                image_message.header.frame_id))
 
             # todo evaluate messages in queues
 
