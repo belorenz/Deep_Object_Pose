@@ -79,7 +79,7 @@ class DopePerformanceGauge:
 
         for image_filename in self.test_data:
             while self.rgb_que.qsize() >= 5:
-                print('Incoming image que too long, waiting until they are '
+                print('Incoming image que too long, waiting until it is '
                       'processed.')
                 rate.sleep()
 
@@ -116,6 +116,7 @@ class DopePerformanceGauge:
             annotation_filename = image_filename[:-3] + "json"
             if os.path.exists(annotation_filename):
                 self.test_data.update({image_filename : annotation_filename})
+        print('Fetched {} images.'.format(len(all_images)))
 
 
     def _read_cam_info(self):
@@ -171,8 +172,9 @@ if __name__ == "__main__":
     print('Init Gauge..')
     rospy.init_node('dope_performance_gauge', anonymous=True)
     DopePerformanceGauge().run()
+    print('\nFinished Dataset.\n')
 
-    try:
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
+    #try:
+    #    rospy.spin()
+    #except rospy.ROSInterruptException:
+    #    pass
