@@ -32,10 +32,7 @@ DOPE_ID=`docker ps -aqf "name=^/${CONTAINER_NAME}$"`
 if [ -z "${DOPE_ID}" ]; then
     echo "Creating new DOPE docker container."
     #xhost +local:root
-    docker run --gpus all  -it --privileged --network=host -v
-    ${HOST_DIR}:${CONTAINER_DIR}:rw -v ${DATASET_DIR}:/root/catkin_ws/src/dope/
-     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
-    --env="DISPLAY" --name=${CONTAINER_NAME} nvidia-dope:kinetic-v1 bash
+    docker run --gpus all  -it --privileged --network=host -v ${HOST_DIR}:${CONTAINER_DIR}:rw -v ${DATASET_DIR}:/root/catkin_ws/src/dope/ -v /tmp/.X11-unix:/tmp/.X11-unix:rw --env="DISPLAY" --name=${CONTAINER_NAME} nvidia-dope:kinetic-v1 bash
 else
     echo "Found DOPE docker container: ${DOPE_ID}."
     # Check if the container is already running and start if necessary.
