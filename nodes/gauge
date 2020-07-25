@@ -79,7 +79,10 @@ class DopePerformanceGauge:
 
         for image_filename in self.test_data:
             while self.rgb_que.qsize() >= 5:
+                print('Incoming image que too long, waiting until they are '
+                      'processed.')
                 rate.sleep()
+
 
             image = cv2.imread(image_filename)
             image_message = self.bridge.cv2_to_imgmsg(image,
