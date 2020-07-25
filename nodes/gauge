@@ -150,7 +150,7 @@ class DopePerformanceGauge:
             print(e)
         else:
             # Save your OpenCV2 image as a png
-            image_id = msg.header.id
+            image_id = msg.header.frame_id
             cv2.imwrite(self.image_output_dir + '/' + str(image_id)+'.png',
                         cv2_img)
             rospy.sleep(0.2)
