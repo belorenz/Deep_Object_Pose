@@ -38,12 +38,14 @@ class DopePerformanceGauge:
                                                  '/dope/gauge/camera_info')
         self.topic_image = rospy.get_param('~topic_image',
                                            '/dope/gauge/image_raw')
-        #self.topic_image = '/dope/rgb_points'
+        self.topic_incoming_image = '/dope/rgb_points'
         self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
         self.info_pub = rospy.Publisher(self.topic_camera_info, CameraInfo,
                                         queue_size=10)
 
         print('Publishing images to {}.'.format(self.topic_image))
+        print('Subscribing to incoming images from {}.'.format(
+            self.topic_incoming_image))
         print('Publishing camera_infos to {}.'.format(self.topic_camera_info))
         print('Saving Images to{}.'.format(self.image_output_dir))
 
@@ -61,7 +63,7 @@ class DopePerformanceGauge:
         #                                     self._image_callback)
         #self.sub_pose = rospy.Subscriber('/dope/pose_car', PoseStamped,
         #                                     self._image_callback)
-        self.sub_rgb = rospy.Subscriber('/dope/rgb_points', Image,
+        self.sub_rgb = rospy.Subscriber(self.topic_incoming_image, Image,
                                              self._image_callback)
         #self.sub_objects = rospy.Subscriber('/dope/detected_objects',
         # Detection3DArray,
@@ -78,8 +80,8 @@ class DopePerformanceGauge:
 
         rate = rospy.Rate(1)
 
-        print('Waiting 15s for DOPE to start..')
-        time.sleep(15)
+        #print('Waiting 15s for DOPE to start..')
+        #time.sleep(15)
         for image_filename in self.test_data:
             while self.rgb_que.qsize() >= 5:
                 print('Incoming image que too long, waiting until it is '
