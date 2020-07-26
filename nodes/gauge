@@ -79,31 +79,34 @@ class DopePerformanceGauge:
 
 
         print('Waiting 15s for DOPE to start..')
-        time.sleep(15)
-        for image_filename in self.test_data:
-            while self.rgb_que.qsize() >= 5:
-                print('Incoming image que too long, waiting until it is '
-                      'processed.')
+        time.sleep(1)
+        try:
+            for image_filename in self.test_data:
+                while self.rgb_que.qsize() >= 5:
+                    print('Incoming image que too long, waiting until it is '
+                          'processed.')
+                    rate.sleep()
+
+                image = cv2.imread(image_filename)
+                image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
+                assert len(image_filename) > 10
+                image_id = image_filename[-10:-4]
+
+                image_message.header.frame_id = image_id
+                image_message.header.stamp = rospy.Time.now()
+
+                self.image_pub.publish(image_message)
+                self.camera_info.header = image_message.header
+                self.info_pub.publish(self.camera_info)
+                print('Published image {} and camera_info!'.format(
+                    image_message.header.frame_id))
+
+                # todo evaluate messages in queues
+
                 rate.sleep()
 
-
-            image = cv2.imread(image_filename)
-            image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
-            assert len(image_filename) > 10
-            image_id = image_filename[-10:-4]
-
-            image_message.header.frame_id = image_id
-            image_message.header.stamp = rospy.Time.now()
-
-            self.image_pub.publish(image_message)
-            self.camera_info.header = image_message.header
-            self.info_pub.publish(self.camera_info)
-            print('Published image {} and camera_info!'.format(
-                image_message.header.frame_id))
-
-            # todo evaluate messages in queues
-
-            rate.sleep()
+        except rospy.ROSInterruptException:
+            raise rospy.ROSInterruptException('Abort by User')
 
     def _assemble_output(self):
         for image in list(self.rgb_que):
@@ -153,7 +156,7 @@ class DopePerformanceGauge:
             print(e)
         else:
             # Save your OpenCV2 image as a png
-            print('Save image to {}'.format(self.image_output_dir + '/' +
+            print('Save image to {}'.format(self.image_output_dir + '/left_' +
                                              str(image_id)+'.png'))
             cv2.imwrite(self.image_output_dir + '/' + str(image_id)+'.png',
                         cv2_img)
