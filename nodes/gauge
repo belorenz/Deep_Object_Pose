@@ -75,38 +75,33 @@ class DopePerformanceGauge:
         self._read_cam_info()
         self._fetch_test_data()
 
-        rate = rospy.Rate(15)
-
+        rate = rospy.Rate(1)
 
         print('Waiting 15s for DOPE to start..')
-        time.sleep(1)
-        try:
-            for image_filename in self.test_data:
-                while self.rgb_que.qsize() >= 5:
-                    print('Incoming image que too long, waiting until it is '
-                          'processed.')
-                    rate.sleep()
-
-                image = cv2.imread(image_filename)
-                image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
-                assert len(image_filename) > 10
-                image_id = image_filename[-10:-4]
-
-                image_message.header.frame_id = image_id
-                image_message.header.stamp = rospy.Time.now()
-
-                self.image_pub.publish(image_message)
-                self.camera_info.header = image_message.header
-                self.info_pub.publish(self.camera_info)
-                print('Published image {} and camera_info!'.format(
-                    image_message.header.frame_id))
-
-                # todo evaluate messages in queues
-
+        time.sleep(15)
+        for image_filename in self.test_data:
+            while self.rgb_que.qsize() >= 5:
+                print('Incoming image que too long, waiting until it is '
+                      'processed.')
                 rate.sleep()
 
-        except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException('Abort by User')
+            image = cv2.imread(image_filename)
+            image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
+            assert len(image_filename) > 10
+            image_id = image_filename[-10:-4]
+
+            image_message.header.frame_id = image_id
+            image_message.header.stamp = rospy.Time.now()
+
+            self.image_pub.publish(image_message)
+            self.camera_info.header = image_message.header
+            self.info_pub.publish(self.camera_info)
+            print('Published image {} and camera_info!'.format(
+                image_message.header.frame_id))
+
+            # todo evaluate messages in queues
+
+            rate.sleep()
 
     def _assemble_output(self):
         for image in list(self.rgb_que):
