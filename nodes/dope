@@ -201,10 +201,14 @@ class DopeNode(object):
 
         print("Running DOPE...  (Listening to camera topic: '{}')".format(rospy.get_param('~topic_camera')))
         print("Ctrl-C to stop")
+        rospy.loginfo("Running DOPE...  (Listening to camera topic: '{}')".format(
+            rospy.get_param('~topic_camera')))
+        rospy.loginfo("Ctrl-C to stop")
 
     def image_callback(self, image_msg, camera_info):
         """Image callback"""
-
+        print('Received image {}'.format(image_msg.header.frame_id))
+        rospy.logdebug('Received image {}'.format(image_msg.header.frame_id))
         img = self.cv_bridge.imgmsg_to_cv2(image_msg, "rgb8")
         # cv2.imwrite('img.png', cv2.cvtColor(img, cv2.COLOR_BGR2RGB))  # for debugging
 
@@ -400,7 +404,7 @@ def main():
     """Main routine to run DOPE"""
 
     # Initialize ROS node
-    rospy.init_node('dope')
+    rospy.init_node('dope', log_level=rospy.DEBUG)
     DopeNode()
 
     try:

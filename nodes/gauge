@@ -49,6 +49,12 @@ class DopePerformanceGauge:
         print('Publishing camera_infos to {}.'.format(self.topic_camera_info))
         print('Saving Images to{}.'.format(self.image_output_dir))
 
+        rospy.loginfo('Publishing images to {}.'.format(self.topic_image))
+        rospy.loginfo('Subscribing to incoming images from {}.'.format(
+            self.topic_incoming_image))
+        rospy.loginfo('Publishing camera_infos to {}.'.format(self.topic_camera_info))
+        rospy.loginfo('Saving Images to{}.'.format(self.image_output_dir))
+
         self.camera_info = None
         self.test_data = {} # {image_filename : annotation_filename}
 
@@ -78,15 +84,17 @@ class DopePerformanceGauge:
         self._read_cam_info()
         self._fetch_test_data()
 
-        rate = rospy.Rate(1)
+        self.rate = rospy.Rate(1)
 
         #print('Waiting 15s for DOPE to start..')
         #time.sleep(15)
         for image_filename in self.test_data:
             while self.rgb_que.qsize() >= 5:
+                rospy.logdebug('Incoming image que too long, waiting until it processed')
                 print('Incoming image que too long, waiting until it is '
                       'processed.')
-                rate.sleep()
+
+                self.rate.sleep()
 
             image = cv2.imread(image_filename)
             image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
@@ -101,10 +109,13 @@ class DopePerformanceGauge:
             self.info_pub.publish(self.camera_info)
             print('Published image {} and camera_info!'.format(
                 image_message.header.frame_id))
+            rospy.logdebug('Published image {} and camera_info!'.format(
+                image_message.header.frame_id))
+
 
             # todo evaluate messages in queues
 
-            rate.sleep()
+            self.rate.sleep()
 
     def _assemble_output(self):
         for image in list(self.rgb_que):
@@ -115,6 +126,7 @@ class DopePerformanceGauge:
 
     def _fetch_test_data(self):
         print('Fetching test_data..')
+        rospy.loginfo('Fetching test_data..')
         all_images = glob.glob(self.image_dir + "/*.png")
         assert len(all_images) > 0
         for image_filename in all_images:
@@ -122,10 +134,12 @@ class DopePerformanceGauge:
             if os.path.exists(annotation_filename):
                 self.test_data.update({image_filename : annotation_filename})
         print('Fetched {} images.'.format(len(all_images)))
+        rospy.loginfo('Fetched {} images.'.format(len(all_images)))
 
 
     def _read_cam_info(self):
         print('Read Camera_info..')
+        rospy.loginfo('Read Camera_info..')
         camera_namespace = rospy.get_param('camera', 'dope/webcam')
         camera_info_url = rospy.get_param('~camera_info_url',
                                           'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml')
@@ -148,6 +162,7 @@ class DopePerformanceGauge:
         try:
             image_id = msg.header.frame_id
             print("Received image: {}".format(str(image_id)))
+            rospy.logdebug("Received image: {}".format(str(image_id)))
             # Convert your ROS Image message to OpenCV2
             cv2_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError, e:
@@ -156,9 +171,10 @@ class DopePerformanceGauge:
             # Save your OpenCV2 image as a png
             filename = self.image_output_dir + '/left_' + str(image_id)+'.png'
             print('Save image to {}'.format(filename))
+            rospy.logdebug('Save image to {}'.format(filename))
             cv2.imwrite(filename, cv2_img)
             assert os.path.isfile(filename)
-            rospy.sleep(1)
+            self.rate.sleep()
 
         #elif type(msg) is String:
         #    self.dimensions_que.put(msg)
@@ -177,9 +193,12 @@ def _callback(self):
 if __name__ == "__main__":
     # Initialize ROS node
     print('Init Gauge..')
+    rospy.logdebug('Init Gauge..')
+
 
     try:
-        rospy.init_node('dope_performance_gauge', anonymous=True)
+        rospy.init_node('dope_performance_gauge', anonymous=True,
+                        log_level=rospy.DEBUG)
         DopePerformanceGauge().run()
         rospy.spin()
 
@@ -187,3 +206,4 @@ if __name__ == "__main__":
         pass
     else:
         print('\nFinished Dataset.\n')
+        rospy.loginfo('\nFinished Dataset.\n')
