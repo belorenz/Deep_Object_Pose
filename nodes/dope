@@ -275,9 +275,6 @@ class DopeNode(object):
                 pose_msg.pose.orientation.z = transformed_ori[2]
                 pose_msg.pose.orientation.w = transformed_ori[3]
 
-                #cuboid_in_image = result['cuboid2d']
-                # todo
-
                 # Publish
                 self.pubs[m].publish(pose_msg)
                 self.pub_dimension[m].publish(str(dims))
@@ -313,6 +310,7 @@ class DopeNode(object):
         image = CvBridge().cv2_to_imgmsg(np.array(im)[..., ::-1])
         image.header = image_msg.header
         self.pub_rgb_dope_points.publish(image, 'bgr8')
+
         self.pub_detections.publish(detection_array)
         self.publish_markers(detection_array)
 
