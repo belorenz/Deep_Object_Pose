@@ -44,6 +44,7 @@ class DopePerformanceGauge:
 
         print('Publishing images to {}.'.format(self.topic_image))
         print('Publishing camera_infos to {}.'.format(self.topic_camera_info))
+        print('Saving Images to{}.'.format(self.image_output_dir))
 
         self.camera_info = None
         self.test_data = {} # {image_filename : annotation_filename}
@@ -145,14 +146,15 @@ class DopePerformanceGauge:
     def _image_callback(self, msg):
         try:
             image_id = msg.header.frame_id
-            print("Received image: {}".format(str(msg.header)))
+            print("Received image: {}".format(str(image_id)))
             # Convert your ROS Image message to OpenCV2
             cv2_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError, e:
             print(e)
         else:
             # Save your OpenCV2 image as a png
-            image_id = msg.header.frame_id
+            print('Save image to {}'.format(self.image_output_dir + '/' +
+                                             str(image_id)+'.png'))
             cv2.imwrite(self.image_output_dir + '/' + str(image_id)+'.png',
                         cv2_img)
             rospy.sleep(1)
@@ -174,11 +176,13 @@ def _callback(self):
 if __name__ == "__main__":
     # Initialize ROS node
     print('Init Gauge..')
-    rospy.init_node('dope_performance_gauge', anonymous=True)
-    DopePerformanceGauge().run()
-    print('\nFinished Dataset.\n')
 
-    #try:
-    #    rospy.spin()
-    #except rospy.ROSInterruptException:
-    #    pass
+    try:
+        rospy.init_node('dope_performance_gauge', anonymous=True)
+        DopePerformanceGauge().run()
+        #rospy.spin()
+
+    except rospy.ROSInterruptException:
+        pass
+    else:
+        print('\nFinished Dataset.\n')
