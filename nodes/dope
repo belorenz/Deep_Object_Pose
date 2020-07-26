@@ -311,9 +311,9 @@ class DopeNode(object):
         #    )
         #)
 
-        image = CvBridge().cv2_to_imgmsg(np.array(im)[..., ::-1])
+        image = CvBridge().cv2_to_imgmsg(np.array(im)[..., ::-1], "bgr8")
         image.header = image_msg.header
-        self.pub_rgb_dope_points.publish(image, encoding='bgr8')
+        self.pub_rgb_dope_points.publish(image)
 
         self.pub_detections.publish(detection_array)
         self.publish_markers(detection_array)
