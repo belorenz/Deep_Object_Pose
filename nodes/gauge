@@ -38,6 +38,7 @@ class DopePerformanceGauge:
                                                  '/dope/gauge/camera_info')
         self.topic_image = rospy.get_param('~topic_image',
                                            '/dope/gauge/image_raw')
+        #self.topic_image = '/dope/rgb_points'
         self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
         self.info_pub = rospy.Publisher(self.topic_camera_info, CameraInfo,
                                         queue_size=10)
@@ -151,10 +152,10 @@ class DopePerformanceGauge:
             print(e)
         else:
             # Save your OpenCV2 image as a png
-            print('Save image to {}'.format(self.image_output_dir + '/left_' +
-                                             str(image_id)+'.png'))
-            cv2.imwrite(self.image_output_dir + '/' + str(image_id)+'.png',
-                        cv2_img)
+            filename = self.image_output_dir + '/left_' + str(image_id)+'.png'
+            print('Save image to {}'.format(filename))
+            cv2.imwrite(filename, cv2_img)
+            assert os.path.isfile(filename)
             rospy.sleep(1)
 
         #elif type(msg) is String:
@@ -178,7 +179,7 @@ if __name__ == "__main__":
     try:
         rospy.init_node('dope_performance_gauge', anonymous=True)
         DopePerformanceGauge().run()
-        #rospy.spin()
+        rospy.spin()
 
     except rospy.ROSInterruptException:
         pass
