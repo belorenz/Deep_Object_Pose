@@ -17,7 +17,7 @@ weights: {
 
 # Cuboid dimension in cm x,y,z
 dimensions: {
-    "car": [16.403600692749023,21.343700408935547,7.179999828338623], #todo change dimensions
+    "car": [200.2562525823, 159.0954366831, 435.0717726487 ],
 }
 
 class_ids: {
