@@ -19,12 +19,25 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CameraInfo
 from vision_msgs.msg import Detection3DArray
 
+from geometry_msgs.msg import Point
+from dope.msg import ProjectedCuboidArray
+from dope.msg import ProjectedCuboid
 
 try:
     import queue
 except ImportError:
     import Queue as queue
 
+class Result:
+
+    def __init__(self, id, image=None, cuboids=None, detections=None):
+        self.id = id
+        self.image = image
+        self.cuboids = cuboids
+        self.detections = detections
+
+    def is_complete(self):
+        return self.image and self.cuboids and self.detections
 
 class DopePerformanceGauge:
 
@@ -52,64 +65,20 @@ class DopePerformanceGauge:
 
         self.bridge = CvBridge()
 
-        self.dimensions_que = queue.Queue()
-        self.pose_car_que = queue.Queue()
-        self.rgb_que = queue.Queue()
-        self.objects_que = queue.Queue()
+        self.cuboid_que = queue.Queue()
+        self.image_que = queue.Queue()
+        self.detections_que = queue.Queue()
 
-        #self.sub_dimensions= rospy.Subscriber('/dope/dimensions_car', String,
-        #                                     self._image_callback)
-        #self.sub_pose = rospy.Subscriber('/dope/pose_car', PoseStamped,
-        #                                     self._image_callback)
         self.sub_rgb = rospy.Subscriber(self.topic_incoming_image, Image,
-                                             self._image_callback)
+                                     self._image_callback)
+        self.sub_cuboids = rospy.Subscriber( '/dope/cuboid_array',
+                                     ProjectedCuboidArray, self._cuboid_callback)
         self.sub_objects = rospy.Subscriber('/dope/detected_objects',
-         Detection3DArray, self._detection_callback)
+                                    Detection3DArray, self._detection_callback)
 
         self.publish_counter = 0
         self.subscribe_counter = 0
-        self.mesh_points = [[97.046936, 109.221970,72.588326],
-                 [88.450996, 112.283882, 70.308479],
-                 [94.265076, 107.279526, 71.913589],
-                 [94.265076, 107.279526, 71.913589],
-                 [88.450996, 112.283882, 70.308479],
-                 [91.004349, 102.917969, 73.401169],
-                 [88.450996, 112.283882, 70.308479],
-                 [83.669846, 105.635780, 71.695366],
-                 [-218.139771, 93.627930, 0.528493],
-                 [-218.202103, 93.393082, -0.004195],
-                 [-218.047989, 93.763283, 0.158585],
-                 [-218.085709, 93.621140, 0.006874],
-                 [-217.295914, 95.097336, 0.830425],
-                 [-217.418289, 94.649719, 0.316202],
-                 [-217.295013, 95.100708, 0.275455],
-                 [-217.418289, 94.649719, 0.316202],
-                 [-108.341049, 20.885658, 72.472771],
-                 [-106.715462, 26.148113, 72.450684],
-                 [-107.590408, 24.840425, 68.810860],
-                 [-107.114151, 30.190290, 68.832985],
-                 [-106.801529, 32.157597, 68.810860],
-                 [-106.227020, 33.612507, 72.450684],
-                 [-106.684898, 28.138435, 72.472771],
-                 [-106.227020, 33.612507, 72.450684],
-                 [78.197899, 76.426178, -46.774796],
-                 [76.635925, 77.200165, -46.628899],
-                 [78.121506, 75.835411, -44.289612],
-                 [76.562416, 76.631538, -44.222630],
-                 [79.908913, 76.804924, -46.628914],
-                 [79.835358, 76.236313, -44.222649],
-                 [78.121506, 75.835411, -44.289612],
-                 [78.095589, 75.635239, -41.742081],
-                 [76.562416, 76.631538, -44.222630],
-                 [-125.423439, 62.642250, 70.621262],
-                 [-122.740456, 67.108887, 71.477936],
-                 [-129.144760, 65.308052, 70.709167],
-                 [-104.074348, 51.241581, 68.978630],
-                 [-106.508072, 55.805851, 69.556892],
-                 [-108.057373, 50.657528, 68.330673],
-                 [-106.508072, 55.805851, 69.556892],
-                 [-109.725281, 52.411983, 68.950821],
-                 [-108.057373, 50.657528, 68.33067]]
+        self.results = {}
 
     def run(self):
         self._read_cam_info()
@@ -119,7 +88,7 @@ class DopePerformanceGauge:
 
 
         for image_filename in self.test_data:
-            while self.publish_counter - self.subscribe_counter > 10:
+            while (self.publish_counter - self.subscribe_counter) > 10:
                 rospy.logdebug('Delay publishing until new data arrives.')
                 self.rate.sleep()
 
@@ -138,6 +107,7 @@ class DopePerformanceGauge:
                 image_message.header.frame_id))
             self.publish_counter += 1
             self.rate.sleep()
+            self._evaluate()
 
 
     def _fetch_test_data(self):
@@ -171,24 +141,9 @@ class DopePerformanceGauge:
             raise RuntimeError('Camera is not calibrated, please supply a valid camera_info_url parameter!')
         self.camera_info = self.info_manager.getCameraInfo()
 
-    def _image_callback(self, msg):
-        try:
-            image_id = msg.header.frame_id
-            rospy.logdebug("Received image: {}".format(str(image_id)))
-            # Convert your ROS Image message to OpenCV2
-            cv2_img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        except CvBridgeError, e:
-            print(e)
-        else:
-            # Save your OpenCV2 image as a png
-            filename = self.image_output_dir + '/' + str(image_id) + '.png'
-            rospy.logdebug('Save image to {}'.format(filename))
-            cv2.imwrite(filename, cv2_img)
-            assert os.path.isfile(filename)
-            self.subscribe_counter += 1
-            self.rate.sleep()
-
-    def _detection_callback(self, detection_msg):
+    def _evaluate(self):
+        #todo queues entleeren, fertige results auswerten und zur
+        # gesamtwertung hinzufügen
         image_id = detection_msg.header.frame_id
         with open('data.txt') as json_file:
             gt_annotation = json.load(self.image_dir + "/" + str(
@@ -199,30 +154,64 @@ class DopePerformanceGauge:
             for detection in detection_msg:
                 distance = math.sqrt(detection)
 
-        # read points from gt
-        # caluclate location, quaternion with pnp (rotation, translation)
-        # choose a 3d model
-        # calucalte diameter
-        # use 3d model points to calculate ADD metric
+        id = msg.header.frame_id
+        result = self.results.get(id, Result(id))
+        result.detections = msg.detections
+        rospy.logdebug("Received detections for frame: {}".format(str(id)))
+        if result.is_complete():
+            self.evaluate(result)
 
 
+    def _image_callback(self, msg):
+        self.image_que.put(msg)
 
+    def _cuboid_callback(self,msg):
+        self.cuboid_que.put(msg)
 
-        #elif type(msg) is String:
-        #    self.dimensions_que.put(msg)
-        #elif type(msg) is PoseStamped:
-        #    self.pose_car_que.put(msg)
-        #elif type(msg) is Detection3DArray:
-        #    self.objects_que.put(msg)
-        #else:
-        #    raise RuntimeError('Message of unknown type received.')
+    def _detection_callback(self, msg):
+        self.detections_que.put(msg)
 
     def _caluclate_ADDS(self, ground_truth, inference):
         pass
 
+    def draw_line(self, point1, point2, line_color, line_width=5):
+        """Draws line on image"""
+        if point1 is not None and point2 is not None:
+            self.draw.line([point1, point2], fill=line_color, width=line_width)
 
-def _callback(self):
-        pass
+    def draw_cube(self, points, color=(0, 255, 0)):
+        """
+        Draws cube with a thick solid line across
+        the front top edge and an X on the top face.
+        """
+
+        # draw front
+        self.draw_line(points[0], points[1], color)
+        self.draw_line(points[1], points[2], color)
+        self.draw_line(points[3], points[2], color)
+        self.draw_line(points[3], points[0], color)
+
+        # draw back
+        self.draw_line(points[4], points[5], color)
+        self.draw_line(points[6], points[5], color)
+        self.draw_line(points[6], points[7], color)
+        self.draw_line(points[4], points[7], color)
+
+        # draw sides
+        self.draw_line(points[0], points[4], color)
+        self.draw_line(points[7], points[3], color)
+        self.draw_line(points[5], points[1], color)
+        self.draw_line(points[2], points[6], color)
+
+        # draw dots
+        self.draw_dot(points[0], point_color=color, point_radius=4)
+        self.draw_dot(points[1], point_color=color, point_radius=4)
+
+        # draw x on the top
+        self.draw_line(points[0], points[5], color)
+        self.draw_line(points[1], points[4], color)
+
+
 
 if __name__ == "__main__":
     # Initialize ROS node
