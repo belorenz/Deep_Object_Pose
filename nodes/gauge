@@ -8,6 +8,8 @@ publishing to an image topic and subscribing resulting poses.
 from __future__ import print_function
 
 import glob
+import json
+import math
 import os
 
 import cv2
@@ -15,6 +17,8 @@ import rospy
 from camera_info_manager import CameraInfoManager
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CameraInfo
+from vision_msgs.msg import Detection3DArray
+
 
 try:
     import queue
@@ -59,26 +63,64 @@ class DopePerformanceGauge:
         #                                     self._image_callback)
         self.sub_rgb = rospy.Subscriber(self.topic_incoming_image, Image,
                                              self._image_callback)
-        #self.sub_objects = rospy.Subscriber('/dope/detected_objects',
-        # Detection3DArray,
-        #                                     self._image_callback)
+        self.sub_objects = rospy.Subscriber('/dope/detected_objects',
+         Detection3DArray, self._detection_callback)
 
-        #self.received_messages = defaultdict(lambda : {'rgb' : None,
-        #                                                 'objects': None,
-        #                                                 'poses': [],
-        #                                                 'dimensions': []} )
+        self.publish_counter = 0
+        self.subscribe_counter = 0
+        self.mesh_points = [[97.046936, 109.221970,72.588326],
+                 [88.450996, 112.283882, 70.308479],
+                 [94.265076, 107.279526, 71.913589],
+                 [94.265076, 107.279526, 71.913589],
+                 [88.450996, 112.283882, 70.308479],
+                 [91.004349, 102.917969, 73.401169],
+                 [88.450996, 112.283882, 70.308479],
+                 [83.669846, 105.635780, 71.695366],
+                 [-218.139771, 93.627930, 0.528493],
+                 [-218.202103, 93.393082, -0.004195],
+                 [-218.047989, 93.763283, 0.158585],
+                 [-218.085709, 93.621140, 0.006874],
+                 [-217.295914, 95.097336, 0.830425],
+                 [-217.418289, 94.649719, 0.316202],
+                 [-217.295013, 95.100708, 0.275455],
+                 [-217.418289, 94.649719, 0.316202],
+                 [-108.341049, 20.885658, 72.472771],
+                 [-106.715462, 26.148113, 72.450684],
+                 [-107.590408, 24.840425, 68.810860],
+                 [-107.114151, 30.190290, 68.832985],
+                 [-106.801529, 32.157597, 68.810860],
+                 [-106.227020, 33.612507, 72.450684],
+                 [-106.684898, 28.138435, 72.472771],
+                 [-106.227020, 33.612507, 72.450684],
+                 [78.197899, 76.426178, -46.774796],
+                 [76.635925, 77.200165, -46.628899],
+                 [78.121506, 75.835411, -44.289612],
+                 [76.562416, 76.631538, -44.222630],
+                 [79.908913, 76.804924, -46.628914],
+                 [79.835358, 76.236313, -44.222649],
+                 [78.121506, 75.835411, -44.289612],
+                 [78.095589, 75.635239, -41.742081],
+                 [76.562416, 76.631538, -44.222630],
+                 [-125.423439, 62.642250, 70.621262],
+                 [-122.740456, 67.108887, 71.477936],
+                 [-129.144760, 65.308052, 70.709167],
+                 [-104.074348, 51.241581, 68.978630],
+                 [-106.508072, 55.805851, 69.556892],
+                 [-108.057373, 50.657528, 68.330673],
+                 [-106.508072, 55.805851, 69.556892],
+                 [-109.725281, 52.411983, 68.950821],
+                 [-108.057373, 50.657528, 68.33067]]
 
     def run(self):
         self._read_cam_info()
         self._fetch_test_data()
 
-        self.rate = rospy.Rate(1)
+        self.rate = rospy.Rate(30)
 
-        #print('Waiting 15s for DOPE to start..')
-        #time.sleep(15)
+
         for image_filename in self.test_data:
-            while self.rgb_que.qsize() >= 5:
-                rospy.logdebug('Incoming image que too long, waiting until it processed')
+            while self.publish_counter - self.subscribe_counter > 10:
+                rospy.logdebug('Delay publishing until new data arrives.')
                 self.rate.sleep()
 
             image = cv2.imread(image_filename)
@@ -94,17 +136,9 @@ class DopePerformanceGauge:
             self.info_pub.publish(self.camera_info)
             rospy.logdebug('Published image {} and camera_info!'.format(
                 image_message.header.frame_id))
-
-            # todo evaluate messages in queues
-
+            self.publish_counter += 1
             self.rate.sleep()
 
-    def _assemble_output(self):
-        for image in list(self.rgb_que):
-            pass
-
-    def calculate_ground_truth(self):
-        pass
 
     def _fetch_test_data(self):
         rospy.loginfo('Fetching test_data..')
@@ -151,7 +185,28 @@ class DopePerformanceGauge:
             rospy.logdebug('Save image to {}'.format(filename))
             cv2.imwrite(filename, cv2_img)
             assert os.path.isfile(filename)
+            self.subscribe_counter += 1
             self.rate.sleep()
+
+    def _detection_callback(self, detection_msg):
+        image_id = detection_msg.header.frame_id
+        with open('data.txt') as json_file:
+            gt_annotation = json.load(self.image_dir + "/" + str(
+                image_id)+".json")
+
+        for gt_object in gt_annotation['objects']:
+            gt_centroid = gt_object['projected_cuboid_centroid']
+            for detection in detection_msg:
+                distance = math.sqrt(detection)
+
+        # read points from gt
+        # caluclate location, quaternion with pnp (rotation, translation)
+        # choose a 3d model
+        # calucalte diameter
+        # use 3d model points to calculate ADD metric
+
+
+
 
         #elif type(msg) is String:
         #    self.dimensions_que.put(msg)
@@ -162,10 +217,12 @@ class DopePerformanceGauge:
         #else:
         #    raise RuntimeError('Message of unknown type received.')
 
+    def _caluclate_ADDS(self, ground_truth, inference):
+        pass
+
 
 def _callback(self):
         pass
-
 
 if __name__ == "__main__":
     # Initialize ROS node
@@ -182,3 +239,4 @@ if __name__ == "__main__":
         pass
     else:
         rospy.loginfo('\nFinished Dataset.\n')
+

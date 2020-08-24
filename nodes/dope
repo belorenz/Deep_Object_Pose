@@ -29,6 +29,9 @@ from std_msgs.msg import String
 from vision_msgs.msg import Detection3D, Detection3DArray, \
     ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
+from dope.msg import ProjectedCuboidArray
+from dope.msg import ProjectedCuboid
 
 
 class Draw(object):
@@ -187,6 +190,10 @@ class DopeNode(object):
                 MarkerArray,
                 queue_size=10
             )
+        self.cuboid_array_publisher = \
+            rospy.Publisher('/dope/cuboid_array',
+                             ProjectedCuboidArray,
+                             queue_size=10)
 
         # Start ROS subscriber
         image_sub = message_filters.Subscriber(
@@ -240,6 +247,8 @@ class DopeNode(object):
 
         detection_array = Detection3DArray()
         detection_array.header = image_msg.header
+        cuboid_array = ProjectedCuboidArray()
+        cuboid_array.header = image_msg.header
 
         for m in self.models:
             # Detect object
@@ -294,6 +303,43 @@ class DopeNode(object):
                 detection.bbox.size.z = dims[2] / CONVERT_SCALE_CM_TO_METERS
                 detection_array.detections.append(detection)
 
+                # debug
+                if result['projected_points'] == None:
+                    rospy.loginfo("result['projected_points'] == None @ {}"
+                                  "".format(image_msg.header.frame_id))
+                    rospy.loginfo("result['projected_points'] == None @ {}"
+                                  "".format(image_msg.header.frame_id))
+                    rospy.loginfo("result['projected_points'] == None @ {}"
+                                  "".format(image_msg.header.frame_id))
+                    rospy.loginfo("result['projected_points'] == None @ {}"
+                                  "".format(image_msg.header.frame_id))
+                    rospy.loginfo("result['projected_points'] == None @ {}"
+                                  "".format(image_msg.header.frame_id))
+                    rospy.loginfo("result['projected_points'] == None @ {}"
+                                  "".format(image_msg.header.frame_id))
+                    continue
+                elif len(result['projected_points']) < 8:
+                    rospy.loginfo('Cuboid with less than 8 Points {}'.format(
+                        image_msg.header.frame_id))
+                    rospy.loginfo('Cuboid with less than 8 Points {}'.format(
+                        image_msg.header.frame_id))
+                    rospy.loginfo('Cuboid with less than 8 Points {}'.format(
+                        image_msg.header.frame_id))
+                    rospy.loginfo('Cuboid with less than 8 Points {}'.format(
+                        image_msg.header.frame_id))
+                    rospy.loginfo('Cuboid with less than 8 Points {}'.format(
+                        image_msg.header.frame_id))
+
+
+                # Create ProjectedCuboid Message
+                cuboid = ProjectedCuboid()
+                for pair in result['projected_points']:
+                    if pair is None:
+                        cuboid.points.append(None)
+                    else:
+                        cuboid.points.append(Point(pair[0], pair[1], 0))
+                cuboid_array.cuboids.append(cuboid)
+
                 # Draw the cube
                 if None not in result['projected_points']:
                     points2d = []
@@ -312,8 +358,8 @@ class DopeNode(object):
         image = CvBridge().cv2_to_imgmsg(np.array(im)[..., ::-1], "bgr8")
         image.header = image_msg.header
         self.pub_rgb_dope_points.publish(image)
-
         self.pub_detections.publish(detection_array)
+        self.cuboid_array_publisher.publish(cuboid_array)
         self.publish_markers(detection_array)
 
     def publish_markers(self, detection_array):

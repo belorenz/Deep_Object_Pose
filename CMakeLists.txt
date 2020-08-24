@@ -58,8 +58,8 @@ catkin_python_setup()
 ## Generate messages in the 'msg' folder
 add_message_files(
     FILES
-    PointArray.msg
-    PointArrayArray.msg
+    ProjectedCuboid.msg
+    ProjectedCuboidArray.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -114,7 +114,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   CATKIN_DEPENDS geometry_msgs message_runtime sensor_msgs std_msgs
-        vision_msgs visualization_msgs geometry_msgs
+        vision_msgs visualization_msgs
 #  DEPENDS system_lib
 )
 
