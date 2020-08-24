@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   geometry_msgs
   message_filters
+  message_generation
   resource_retriever
   rospy
   sensor_msgs
@@ -55,11 +56,11 @@ catkin_python_setup()
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+    FILES
+    PointArray.msg
+    PointArrayArray.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -76,10 +77,11 @@ catkin_python_setup()
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+  std_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -111,7 +113,8 @@ catkin_python_setup()
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs sensor_msgs std_msgs vision_msgs visualization_msgs
+  CATKIN_DEPENDS geometry_msgs message_runtime sensor_msgs std_msgs
+        vision_msgs visualization_msgs geometry_msgs
 #  DEPENDS system_lib
 )
 
