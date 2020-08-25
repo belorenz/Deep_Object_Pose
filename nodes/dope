@@ -304,7 +304,7 @@ class DopeNode(object):
                 detection_array.detections.append(detection)
 
                 # debug
-                if result['projected_points'] == None:
+                if result['projected_points'] is None:
                     rospy.loginfo("result['projected_points'] == None @ {}"
                                   "".format(image_msg.header.frame_id))
                     rospy.loginfo("result['projected_points'] == None @ {}"
