@@ -306,7 +306,7 @@ class DopeNode(object):
                 # debug
                 if result['projected_points'] is None:
                     rospy.loginfo("result['projected_points'] == None @ {}"
-                                  "".format(image_msg.header.frame_id))
+                                  "".rmat(image_msg.header.frame_id))
                     rospy.loginfo("result['projected_points'] == None @ {}"
                                   "".format(image_msg.header.frame_id))
                     rospy.loginfo("result['projected_points'] == None @ {}"
