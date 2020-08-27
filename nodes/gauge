@@ -11,6 +11,7 @@ import glob
 import json
 import math
 import os
+import time
 
 import cv2
 import numpy as np
@@ -47,9 +48,8 @@ class Result:
 class DopePerformanceGauge:
 
     def __init__(self):
-        self.image_dir = rospy.get_param('~image_dir',
-                                         '/media/benjamin/Liesbeth/MultiCarPose_v0.9/eval')
-        self.image_output_dir = rospy.get_param('~image_output_dir', '')
+        self.image_dir = rospy.get_param('~image_dir')
+        self.image_output_dir = rospy.get_param('~image_output_dir')
         self.current_dir = ''
         self.topic_camera_info = rospy.get_param('~topic_camera_info',
                                                  '/dope/gauge/camera_info')
@@ -66,14 +66,22 @@ class DopePerformanceGauge:
         rospy.loginfo('Publishing camera_infos to {}.'.format(self.topic_camera_info))
         rospy.loginfo('Saving Images to{}.'.format(self.image_output_dir))
 
-        self.camera_info = None
-        self.test_data = {} # {image_filename : annotation_filename}
-
         self.bridge = CvBridge()
+        self.munkres = Munkres()
 
         self.cuboid_que = queue.Queue()
         self.image_que = queue.Queue()
         self.detection_que = queue.Queue()
+
+        self.test_data = {} # {image_filename : annotation_filename}
+
+        self.images = {}
+        self.detections = {}
+        self.cuboids = {}
+
+        self.camera_info = None
+        self.publish_counter = 0
+        self.subscribe_counter = 0
 
         self.sub_rgb = rospy.Subscriber(self.topic_incoming_image, Image,
                                      self._image_callback)
@@ -82,39 +90,28 @@ class DopePerformanceGauge:
         self.sub_objects = rospy.Subscriber('/dope/detected_objects',
                                     Detection3DArray, self._detection_callback)
 
-        self.publish_counter = 0
-        self.subscribe_counter = 0
-        self.images = {}
-        self.detections = {}
-        self.cuboids = {}
+        self.reset_local_metric_results()
 
-        self.munkres = Munkres()
+        self.global_TP_5 = 0
+        self.global_FP_5 = 0
+        self.global_FN_5 = 0
 
-        self.reset_counter
+        self.global_TP_10 = 0
+        self.global_FP_10 = 0
+        self.global_FN_10 = 0
 
-        self.global_true_positive_th5 = 0
-        self.global_false_positive_th5 = 0
-        self.global_false_negative_th5 = 0
-
-        self.global_true_positive_th10 = 0
-        self.global_false_positive_th10 = 0
-        self.global_false_negative_th10 = 0
-
-        self.global_true_positive_th20 = 0
-        self.global_false_positive_th20 = 0
-        self.global_false_negative_th20 = 0
+        self.global_TP_20 = 0
+        self.global_FP_20 = 0
+        self.global_FN_20 = 0
 
     def run(self):
-        self.image_dir = '/root/bla/test'
-        #self.fake_evaluate()
-        #return
         self._read_cam_info()
 
         for self.current_dir in [x[0] for x in os.walk(self.image_dir)][1:]:
+            self.current_relative_dir = self.current_dir.split('/')[-1]
             self.test_data = {}
             self._fetch_test_data()
-            self.rate = rospy.Rate(30)
-
+            self.rate = rospy.Rate(100)
 
             for image_filename in self.test_data:
                 i = 0
@@ -138,51 +135,138 @@ class DopePerformanceGauge:
                 rospy.logdebug('Published image {} and camera_info!'.format(
                     image_message.header.frame_id))
                 self.publish_counter += 1
-                self.rate.sleep()
                 self.empty_queues()
-                self._evaluate()
 
-                self.save_result()
+                if self.images:
+                    self._process_image()
 
-    def reset_counter(self):
-        self.true_positive_th5 = 0
-        self.false_positive_th5 = 0
-        self.false_negative_th5 = 0
+            # final evaluation
+            time.sleep(10)
+            self.empty_queues()
+            if self.images:
+                self._process_image()
 
-        self.true_positive_th10 = 0
-        self.false_positive_th10 = 0
-        self.false_negative_th10 = 0
+            self.save_metric_results()
+            self.reset_local_metric_results()
 
-        self.true_positive_th20 = 0
-        self.false_positive_th20 = 0
-        self.false_negative_th20 = 0
+    def reset_local_metric_results(self):
+        self.TP_5 = 0
+        self.FP_5 = 0
+        self.FN_5 = 0
 
-    def save_result(self, last=False):
-        self.global_true_positive_th5 +=  self.true_positive_th5
-        self.global_false_positive_th5 += self.false_negative_th5
-        self.global_false_positive_th5 += self.true_positive_th5
+        self.TP_10 = 0
+        self.FP_10 = 0
+        self.FN_10 = 0
 
-        self.global_true_positive_th10 +=  self.true_positive_th10
-        self.global_false_positive_th10 += self.false_negative_th10
-        self.global_false_positive_th10 += self.true_positive_th10
+        self.TP_20 = 0
+        self.FP_20 = 0
+        self.FN_20 = 0
 
-        self.global_true_positive_th20 +=  self.true_positive_th20
-        self.global_false_positive_th20 += self.false_negative_th20
-        self.global_false_positive_th20 += self.true_positive_th20
+
+    def save_metric_results(self):
+        self.global_TP_5 +=  self.TP_5
+        self.global_FN_5 += self.FN_5
+        self.global_FP_5 += self.FP_5
+
+        self.global_TP_10 +=  self.TP_10
+        self.global_FN_10 += self.FN_10
+        self.global_FP_10 += self.FP_10
+
+        self.global_TP_20 +=  self.TP_20
+        self.global_FN_20 += self.FN_20
+        self.global_FP_20 += self.FP_20
+
+        precision_20 = recall_20 = precision_10 = recall_10 = precision_5 = recall_5 = 0
+
+        if (float(self.TP_20) + self.FP_20) >0:
+            precision_20 = float(self.TP_20) / (float(self.TP_20) + self.FP_20)
+
+        if (float(self.TP_20) + self.FN_20) > 0:
+            recall_20 = float(self.TP_20) / (float(self.TP_20) + self.FN_20)
+
+        if (float(self.TP_10) + self.FP_10) >0:
+            precision_10 = float(self.TP_10) / (float(self.TP_10) + self.FP_10)
+
+        if (float(self.TP_10) + self.FN_10) > 0:
+            recall_10 = float(self.TP_10) / (float(self.TP_10) + self.FN_10)
+
+        if (float(self.TP_5) + self.FP_5) >0:
+            precision_5 = float(self.TP_5) / (float(self.TP_5) + self.FP_5)
+
+        if (float(self.TP_5) + self.FN_5) > 0:
+            recall_5 = float(self.TP_5) / (float(self.TP_5) + self.FN_5)
+
+        local_output = ''
+        # 20
+        local_output += 'TP_20: {}\n'.format(self.TP_20) + 'FN_20: {}\n'.format(self.FN_20) + \
+                        'FP_20: {}\n'.format(self.FP_20)
+        if precision_20 and recall_20:
+            local_output += 'Precision_20: {}\n'.format(precision_20) + 'Recall_20: {}\n'.format(recall_20) + '\n'
+
+        # 10
+        local_output += 'TP_10: {}\n'.format(self.TP_10) + 'FN_10: {}\n'.format(self.FN_10) + \
+                        'FP_10: {}\n'.format(self.FP_10)
+        if precision_10 and recall_10:
+            local_output += 'Precision_10: {}\n'.format(precision_10) + 'Recall_10: {}\n'.format(recall_10) + '\n'
+
+        # 5
+        local_output += 'TP_5: {}\n'.format(self.TP_5) + 'FN_5: {}\n'.format(self.FN_5) + \
+                        'FP_5: {}\n'.format(self.FP_5)
+        if precision_5 and recall_5:
+            local_output += 'Precision_5: {}\n'.format(precision_5) + 'Recall_5: {}\n'.format(recall_5) + '\n'
+
+        precision_20 = recall_20 = precision_10 = recall_10 = precision_5 = recall_5 = 0
+
+        if (float(self.global_TP_20) + self.global_FP_20) >0:
+            precision_20 = float(self.global_TP_20) / (float(self.global_TP_20) + self.global_FP_20)
+
+        if (float(self.global_TP_20) + self.global_FN_20) > 0:
+            recall_20 = float(self.global_TP_20) / (float(self.global_TP_20) + self.global_FN_20)
+
+        if (float(self.global_TP_10) + self.global_FP_10) >0:
+            precision_10 = float(self.global_TP_10) / (float(self.global_TP_10) + self.global_FP_10)
+
+        if (float(self.global_TP_10) + self.global_FN_10) > 0:
+            recall_10 = float(self.global_TP_10) / (float(self.global_TP_10) + self.global_FN_10)
+
+        if (float(self.global_TP_5) + self.global_FP_5) >0:
+            precision_5 = float(self.global_TP_5) / (float(self.global_TP_5) + self.global_FP_5)
+
+        if (float(self.global_TP_5) + self.global_FN_5) > 0:
+            recall_5 = float(self.global_TP_5) / (float(self.global_TP_5) + self.global_FN_5)
+
+
+        global_output = ''
+        # 20
+        global_output += 'global_TP_20: {}\n'.format(self.global_TP_20) + 'global_FN_20: {}\n'.format(self.global_FN_20) + \
+                        'global_FP_20: {}\n'.format(self.global_FP_20)
+        if precision_20 and recall_20:
+            global_output += 'Precision_20: {}\n'.format(precision_20) + 'Recall_20: {}\n'.format(recall_20) + '\n'
+
+        # 10
+        global_output += 'global_TP_10: {}\n'.format(self.global_TP_10) + 'global_FN_10: {}\n'.format(self.global_FN_10) + \
+                        'global_FP_10: {}\n'.format(self.global_FP_10)
+        if precision_10 and recall_10:
+            global_output += 'Precision_10: {}\n'.format(precision_10) + 'Recall_10: {}\n'.format(recall_10) + '\n'
+
+        # 5
+        global_output += 'global_TP_5: {}\n'.format(self.global_TP_5) + 'global_FN_5: {}\n'.format(self.global_FN_5) + \
+                        'global_FP_5: {}\n'.format(self.global_FP_5)
+        if precision_5 and recall_5:
+            global_output += 'Precision_5: {}\n'.format(precision_5) + 'Recall_5: {}\n'.format(recall_5) + '\n'
+
 
         filename = self.image_output_dir + '/results.txt'
-
         if os.path.exists(filename):
             append_write = 'a' # append if already exists
         else:
             append_write = 'w' # make a new file if not
 
         with open(filename,append_write) as file:
-            if not last:
-                file.write(self.current_dir + '\n' + self.get_result() + '\n\n')
-            else:
-                file.write(self.current_dir + '\n' + self.get_result(total=True) + '\n\n')
-        self.reset_counter()
+            file.write(self.current_relative_dir + '\n' + local_output + '\n')
+            file.write('Global:\n' + global_output + '\n\n')
+        rospy.loginfo('Saved metric results.')
+
 
 
     def _fetch_test_data(self):
@@ -218,51 +302,51 @@ class DopePerformanceGauge:
             raise RuntimeError('Camera is not calibrated, please supply a valid camera_info_url parameter!')
         self.camera_info = self.info_manager.getCameraInfo()
 
-    def _evaluate(self):
-        if not self.images:
-            rospy.logdebug('Empty image dict')
-            return
+    def _process_image(self):
+        assert self.images
         for frame_id, image in self.images.items():
             if frame_id in self.detections and frame_id in self.cuboids:
                 rospy.logdebug('{} is complete!'.format(frame_id))
 
-                #annotation = self.get_annotation(frame_id)
+                #annotation = self.load_annotation_file(frame_id)
                 #gt_cuboids = [object['projected_cuboid'] for object in annotation['objects']]
                 #estimated_cuboids =  self.cuboids.get(frame_id).cuboids
 
                 #closest_cuboid_list = self.get_closest_cuboids(gt_cuboids, estimated_cuboids)
 
                 # count TP, FN, FP
-                self._process_image(frame_id)
+                self._process_cuboids_in_image(frame_id)
 
                 self.save_image(image,self.cuboids.get(frame_id), self.detections.get(frame_id))
 
                 del self.images[frame_id]
                 del self.cuboids[frame_id]
                 del self.detections[frame_id]
+                #rospy.logdebug(self.get_result())
+                #rospy.logdebug(self.get_result(total=True))
 
-    def _process_image(self, frame_id):
+    def _process_cuboids_in_image(self, frame_id):
 
-        annotation = self.get_annotation(frame_id)
+        annotation = self.load_annotation_file(frame_id)
         gt_cuboids = [object['projected_cuboid'] for object in annotation['objects']]
         estimated_cuboids = self.cuboids.get(frame_id).cuboids
         if not estimated_cuboids:
-            self.false_negative_th5 += len(gt_cuboids)
-            self.false_negative_th10 += len(gt_cuboids)
-            self.false_negative_th20 += len(gt_cuboids)
+            self.FN_5 += len(gt_cuboids)
+            self.FN_10 += len(gt_cuboids)
+            self.FN_20 += len(gt_cuboids)
             return
 
-        rospy.logdebug('gt_cuboids: {}'.format(gt_cuboids))
-        rospy.logdebug('estimated_cuboids: {}'.format(estimated_cuboids))
+        rospy.logdebug('gt_cuboids on frame {}: {}'.format(frame_id, len(gt_cuboids)))
+        rospy.logdebug('estimated_cuboids on frame {}: {}'.format(frame_id, len(estimated_cuboids)))
 
         closest_cuboid_list, matrix = self.get_closest_cuboids(gt_cuboids, estimated_cuboids)
 
-        rospy.logdebug('Cost_Matrix: {}'.format(matrix))
+        #rospy.logdebug('Cost_Matrix: {}'.format(matrix))
         #rospy.logdebug(closest_cuboid_list)
         #print_matrix(matrix)
-        for row, column in closest_cuboid_list:
-            value = matrix[row][column]
-            rospy.logdebug('({}, {}) -> {}'.format(row, column, value))
+        #for row, column in closest_cuboid_list:
+        #    value = matrix[row][column]
+        #    rospy.logdebug('({}, {}) -> {}'.format(row, column, value))
 
         # Distance Munkres Matrix
         # [ 330,   0]
@@ -281,19 +365,19 @@ class DopePerformanceGauge:
             add2d_distance = matrix[estimation_cuboid_id][gt_cuboid_id]
             bounding_box_diameter = self.get_cuboid_2d_diameter(gt_cuboids[gt_cuboid_id])
             if add2d_distance < (0.2 * bounding_box_diameter):
-                self.true_positive_th20 += 1
+                self.TP_20 += 1
             else:
-                self.false_positive_th20 += 1
+                self.FP_20 += 1
 
             if add2d_distance < (0.1 * bounding_box_diameter):
-                self.true_positive_th10 += 1
+                self.TP_10 += 1
             else:
-                self.false_positive_th10 += 1
+                self.FP_10 += 1
 
             if add2d_distance < (0.05 * bounding_box_diameter):
-                self.true_positive_th5 += 1
+                self.TP_5 += 1
             else:
-                self.false_positive_th5 += 1
+                self.FP_5 += 1
 
             # what right value and left value of tuple came up?
             left_value_list.append(estimation_cuboid_id)
@@ -305,79 +389,37 @@ class DopePerformanceGauge:
         for gt_id in range(len(gt_cuboids)):
             if gt_id not in right_value_list:
                 rospy.loginfo('FN: Ground truth cuboid {} was not estimated'.format(gt_id))
-                self.false_negative_th5 += 1
-                self.false_negative_th10 += 1
-                self.false_negative_th20 += 1
+                self.FN_5 += 1
+                self.FN_10 += 1
+                self.FN_20 += 1
         for estimate_id in range(len(estimated_cuboids)):
             if estimate_id not in left_value_list:
                 rospy.loginfo('FP: Estimated cuboid was not assigned to a ground truth (more estimations, than ground truths)')
-                self.false_positive_th5 += 1
-                self.false_positive_th10 += 1
-                self.false_positive_th20 += 1
+                self.FP_5 += 1
+                self.FP_10 += 1
+                self.FP_20 += 1
 
-
-        #rospy.logdebug('true_positive_th20: {}'.format(self.true_positive_th20))
-        #rospy.logdebug('false_negative_th20: {}'.format(self.false_negative_th20))
-        #rospy.logdebug('false_positive_th20: {}'.format(self.false_positive_th20))
-        #rospy.logdebug('PRECISION_th20: {}'.format(self.true_positive_th20 / (self.true_positive_th20 + self.false_positive_th20)))
-        #rospy.logdebug('RECALL_th20: {}'.format(self.true_positive_th20 / (self.true_positive_th20 + self.false_negative_th20)))
         #rospy.logdebug('')
-        #rospy.logdebug('true_positive_th10: {}'.format(self.true_positive_th10))
-        #rospy.logdebug('false_negative_th10: {}'.format(self.false_negative_th10))
-        #rospy.logdebug('false_positive_th10: {}'.format(self.false_positive_th10))
-        #rospy.logdebug('PRECISION_th10: {}'.format(self.true_positive_th10 / (self.true_positive_th10 + self.false_positive_th10)))
-        #rospy.logdebug('RECALL_th10: {}'.format(self.true_positive_th10 / (self.true_positive_th10 + self.false_negative_th10)))
         #rospy.logdebug('')
-        #rospy.logdebug('true_positive_th5: {}'.format(self.true_positive_th5))
-        #rospy.logdebug('false_negative_th5: {}'.format(self.false_negative_th5))
-        #rospy.logdebug('false_positive_th5: {}'.format(self.false_positive_th5))
-        #rospy.logdebug('PRECISION_th5: {}'.format(self.true_positive_th5 / (self.true_positive_th5 + self.false_positive_th5)))
-        #rospy.logdebug('RECALL_th5: {}'.format(self.true_positive_th5 / (self.true_positive_th5 + self.false_negative_th5)))
-        ##self.save_image(image,self.cuboids.get(frame_id), self.detections.get(frame_id))
-
-    def get_result(self, total=False):
-         if not total:
-             return 'true_positive_th20: {}'.format(self.true_positive_th20) + \
-            'false_negative_th20: {}'.format(self.false_negative_th20) + \
-            '\n' + \
-            'false_positive_th20: {}'.format(self.false_positive_th20) + \
-            'PRECISION_th20: {}'.format(self.true_positive_th20 / (self.true_positive_th20 + self.false_positive_th20)) + \
-            'RECALL_th20: {}'.format(self.true_positive_th20 / (self.true_positive_th20 + self.false_negative_th20)) + \
-             '\n' + \
-            'true_positive_th10: {}'.format(self.true_positive_th10) + \
-            'false_negative_th10: {}'.format(self.false_negative_th10) + \
-            'false_positive_th10: {}'.format(self.false_positive_th10) + \
-            'PRECISION_th10: {}'.format(self.true_positive_th10 / (self.true_positive_th10 + self.false_positive_th10)) + \
-            'RECALL_th10: {}'.format(self.true_positive_th10 / (self.true_positive_th10 + self.false_negative_th10)) + \
-             '\n' + \
-            'true_positive_th5: {}'.format(self.true_positive_th5) + \
-            'false_negative_th5: {}'.format(self.false_negative_th5) + \
-            'false_positive_th5: {}'.format(self.false_positive_th5) + \
-            'PRECISION_th5: {}'.format(self.true_positive_th5 / (self.true_positive_th5 + self.false_positive_th5)) + \
-            'RECALL_th5: {}'.format(self.true_positive_th5 / (self.true_positive_th5 + self.false_negative_th5))
-         else:
-            return 'global_true_positive_th20: {}'.format(self.global_true_positive_th20) + \
-           'global_false_negative_th20: {}'.format(self.global_false_negative_th20) + \
-           '\n' + \
-           'global_false_positive_th20: {}'.format(self.global_false_positive_th20) + \
-           'PRECISION_th20: {}'.format(self.global_true_positive_th20 / (self.global_true_positive_th20 + self.global_false_positive_th20)) + \
-           'RECALL_th20: {}'.format(self.global_true_positive_th20 / (self.global_true_positive_th20 + self.global_false_negative_th20)) + \
-           '\n' + \
-           'global_true_positive_th10: {}'.format(self.global_true_positive_th10) + \
-           'global_false_negative_th10: {}'.format(self.global_false_negative_th10) + \
-           'global_false_positive_th10: {}'.format(self.global_false_positive_th10) + \
-           'PRECISION_th10: {}'.format(self.global_true_positive_th10 / (self.global_true_positive_th10 + self.global_false_positive_th10)) + \
-           'RECALL_th10: {}'.format(self.global_true_positive_th10 / (self.global_true_positive_th10 + self.global_false_negative_th10)) + \
-           '\n' + \
-           'global_true_positive_th5: {}'.format(self.global_true_positive_th5) + \
-           'global_false_negative_th5: {}'.format(self.global_false_negative_th5) + \
-           'global_false_positive_th5: {}'.format(self.global_false_positive_th5) + \
-           'PRECISION_th5: {}'.format(self.global_true_positive_th5 / (self.global_true_positive_th5 + self.global_false_positive_th5)) + \
-           'RECALL_th5: {}'.format(self.global_true_positive_th5 / (self.global_true_positive_th5 + self.global_false_negative_th5))
-
-
-
-
+        #rospy.logdebug('TP_20: {}'.format(self.TP_20))
+        #rospy.logdebug('FN_20: {}'.format(self.FN_20))
+        #rospy.logdebug('FP_20: {}'.format(self.FP_20))
+        #rospy.logdebug('PRECISION_th20: {}'.format(float(self.TP_20) / (float(self.TP_20) + self.FP_20)))
+        #rospy.logdebug('RECALL_th20: {}'.format(float(self.TP_20) / (float(self.TP_20) + self.FN_20)))
+        #rospy.logdebug('')
+        #rospy.logdebug('TP_10: {}'.format(float(self.TP_10)))
+        #rospy.logdebug('FN_10: {}'.format(self.FN_10))
+        #rospy.logdebug('FP_10: {}'.format(self.FP_10))
+        #rospy.logdebug('PRECISION_th10: {}'.format(float(self.TP_10) / (float(self.TP_10) + self.FP_10)))
+        #rospy.logdebug('RECALL_th10: {}'.format(float(self.TP_10) / (float(self.TP_10) + self.FN_10)))
+        #rospy.logdebug('')
+        #rospy.logdebug('TP_5: {}'.format(float(self.TP_5)))
+        #rospy.logdebug('FN_5: {}'.format(self.FN_5))
+        #rospy.logdebug('FP_5: {}'.format(self.FP_5))
+        #rospy.logdebug('PRECISION_th5: {}'.format(float(self.TP_5) / (float(self.TP_5) + self.FP_5)))
+        #rospy.logdebug('RECALL_th5: {}'.format(float(self.TP_5) / (float(self.TP_5) + self.FN_5)))
+        #rospy.logdebug('')
+        #rospy.logdebug('')
 
 
     def get_cuboid_2d_diameter(self, cuboid):
@@ -424,7 +466,7 @@ class DopePerformanceGauge:
                                       ((gt_cuboid[i][1]-estimated_cuboid.points[i].y)**2) )
         return (float(sum_distance) /  float(number_of_cuboid_points))
 
-    def get_annotation(self, id):
+    def load_annotation_file(self, id):
         with open(self.current_dir + '/' + str(id) + '.json') as json_file:
             gt_annotation = json.load(json_file)
         return gt_annotation
@@ -436,11 +478,12 @@ class DopePerformanceGauge:
         except CvBridgeError as e:
             print(e)
         else:
-            final_img = self.draw_cuboids_on_image(image=cv2_img,
-                                                   cuboids=cuboids,
-                                                   detections=detections)
+            #final_img = self.draw_cuboids_on_image(image=cv2_img,
+            #                                       cuboids=cuboids,
+            #                                       detections=detections)
+            final_img = cv2_img
             # Save your OpenCV2 image as a png
-            filename = self.image_output_dir + '/' + str(image_id) + '.png'
+            filename = self.image_output_dir + '/' + self.current_relative_dir + '/' + str(image_id) + '.png'
             rospy.logdebug('Save image to {}'.format(filename))
             cv2.imwrite(filename, final_img)
             assert os.path.isfile(filename)
@@ -451,8 +494,6 @@ class DopePerformanceGauge:
 
         for cuboid in cuboids.cuboids:
             points = [(int(point.x), int(point.y)) for point in cuboid.points]
-
-            #assert len(points) == 9
 
             #front
             cv2.line(image, points[0], points[1], (0, 0, 255), 3)
@@ -475,10 +516,6 @@ class DopePerformanceGauge:
             # cross on top
             cv2.line(image, points[0], points[5], (0, 0, 255), 3)
             cv2.line(image, points[1], points[4], (0, 0, 255), 3)
-
-            # draw center
-            #cv2.circle(image, points[8], radius=0, color=(255, 0, 0), thickness=-1)
-
         return image
 
     def drain(self, q):
@@ -494,17 +531,14 @@ class DopePerformanceGauge:
 
     def empty_queues(self):
         for image in self.drain(self.image_que):
-            rospy.logdebug('Drain image {} from image queue'.format(image.header.frame_id))
             self.images[image.header.frame_id] = image
             assert self.images
 
         for detection in self.drain(self.detection_que):
-            rospy.logdebug('Drain detection {} from detection queue'.format(detection.header.frame_id))
             self.detections.update({detection.header.frame_id : detection})
             assert self.detections
 
         for cuboid in self.drain(self.cuboid_que):
-            rospy.logdebug('Drain cuboid {} from cuboid queue'.format(cuboid.header.frame_id))
             self.cuboids.update({cuboid.header.frame_id : cuboid})
             assert self.cuboids
 
