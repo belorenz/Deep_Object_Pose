@@ -1,6 +1,6 @@
 topic_camera_info: "/dope/gauge/camera_info"
 topic_image: "/dope/gauge/image_raw"
-image_dir: "/root/bla/test"
-image_output_dir: "/root/detection_output/test"
+image_dir: "/root/klaus/test"
+image_output_dir: "/root/klaus/out"
 graph: "package://dope/weights/car.pth"
 camera_info_url : "package://dope/config/camera_info_gauge.yaml"

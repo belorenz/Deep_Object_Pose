@@ -106,7 +106,7 @@ class DopePerformanceGauge:
 
     def run(self):
         self._read_cam_info()
-
+        rospy.loginfo([x[0] for x in os.walk(self.image_dir)][1:])
         for self.current_dir in [x[0] for x in os.walk(self.image_dir)][1:]:
             self.current_relative_dir = self.current_dir.split('/')[-1]
             self.test_data = {}
@@ -115,7 +115,7 @@ class DopePerformanceGauge:
 
             for image_filename in self.test_data:
                 i = 0
-                while (self.publish_counter - self.subscribe_counter) > 10:
+                while (self.publish_counter - self.subscribe_counter) > 20:
                     self.rate.sleep()
                     if i % 50 == 0:
                         rospy.logdebug('Delay publishing until new data arrives.')
@@ -124,7 +124,7 @@ class DopePerformanceGauge:
                 image = cv2.imread(image_filename)
                 image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
                 assert len(image_filename) > 10
-                image_id = image_filename[-10:-4]
+                image_id = image_filename[-11:-4]
 
                 image_message.header.frame_id = image_id
                 image_message.header.stamp = rospy.Time.now()
@@ -486,7 +486,7 @@ class DopePerformanceGauge:
             filename = self.image_output_dir + '/' + self.current_relative_dir + '/' + str(image_id) + '.png'
             rospy.logdebug('Save image to {}'.format(filename))
             cv2.imwrite(filename, final_img)
-            assert os.path.isfile(filename)
+            assert os.path.isfile(filename), 'No file: {}'.format(filename)
             self.rate.sleep()
 
 

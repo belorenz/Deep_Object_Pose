@@ -64,4 +64,4 @@ mesh_scales: {
 thresh_angle: 0.5
 thresh_map: 0.01
 sigma: 3
-thresh_points: 0.1
+thresh_points: 0.001
