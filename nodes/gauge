@@ -56,9 +56,9 @@ class DopePerformanceGauge:
         self.topic_image = rospy.get_param('~topic_image',
                                            '/dope/gauge/image_raw')
         self.topic_incoming_image = '/dope/rgb_points'
-        self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=10)
+        self.image_pub = rospy.Publisher(self.topic_image, Image, queue_size=144)
         self.info_pub = rospy.Publisher(self.topic_camera_info, CameraInfo,
-                                        queue_size=10)
+                                        queue_size=144)
 
         rospy.loginfo('Publishing images to {}.'.format(self.topic_image))
         rospy.loginfo('Subscribing to incoming images from {}.'.format(
@@ -82,6 +82,8 @@ class DopePerformanceGauge:
         self.camera_info = None
         self.publish_counter = 0
         self.subscribe_counter = 0
+        self.processed_images = 0
+        self.lost_images = []
 
         self.sub_rgb = rospy.Subscriber(self.topic_incoming_image, Image,
                                      self._image_callback)
@@ -100,22 +102,22 @@ class DopePerformanceGauge:
         self.global_FP_10 = 0
         self.global_FN_10 = 0
 
-        self.global_TP_20 = 0
-        self.global_FP_20 = 0
-        self.global_FN_20 = 0
+        self.global_TP_15 = 0
+        self.global_FP_15 = 0
+        self.global_FN_15 = 0
 
     def run(self):
         self._read_cam_info()
-        rospy.loginfo([x[0] for x in os.walk(self.image_dir)][1:])
+        #rospy.loginfo([x[0] for x in os.walk(self.image_dir)][1:])
         for self.current_dir in [x[0] for x in os.walk(self.image_dir)][1:]:
             self.current_relative_dir = self.current_dir.split('/')[-1]
             self.test_data = {}
             self._fetch_test_data()
-            self.rate = rospy.Rate(100)
+            self.rate = rospy.Rate(3)
 
             for image_filename in self.test_data:
                 i = 0
-                while (self.publish_counter - self.subscribe_counter) > 20:
+                while (self.publish_counter - self.subscribe_counter) > 5:
                     self.rate.sleep()
                     if i % 50 == 0:
                         rospy.logdebug('Delay publishing until new data arrives.')
@@ -125,23 +127,25 @@ class DopePerformanceGauge:
                 image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
                 assert len(image_filename) > 10
                 image_id = image_filename[-11:-4]
+                self.lost_images.append(image_id)
 
                 image_message.header.frame_id = image_id
                 image_message.header.stamp = rospy.Time.now()
 
-                self.image_pub.publish(image_message)
                 self.camera_info.header = image_message.header
                 self.info_pub.publish(self.camera_info)
+                self.image_pub.publish(image_message)
                 rospy.logdebug('Published image {} and camera_info!'.format(
                     image_message.header.frame_id))
                 self.publish_counter += 1
                 self.empty_queues()
+                self.rate.sleep()
 
                 if self.images:
                     self._process_image()
 
             # final evaluation
-            time.sleep(10)
+            time.sleep(3)
             self.empty_queues()
             if self.images:
                 self._process_image()
@@ -158,9 +162,9 @@ class DopePerformanceGauge:
         self.FP_10 = 0
         self.FN_10 = 0
 
-        self.TP_20 = 0
-        self.FP_20 = 0
-        self.FN_20 = 0
+        self.TP_15 = 0
+        self.FP_15 = 0
+        self.FN_15 = 0
 
 
     def save_metric_results(self):
@@ -172,17 +176,17 @@ class DopePerformanceGauge:
         self.global_FN_10 += self.FN_10
         self.global_FP_10 += self.FP_10
 
-        self.global_TP_20 +=  self.TP_20
-        self.global_FN_20 += self.FN_20
-        self.global_FP_20 += self.FP_20
+        self.global_TP_15 +=  self.TP_15
+        self.global_FN_15 += self.FN_15
+        self.global_FP_15 += self.FP_15
 
-        precision_20 = recall_20 = precision_10 = recall_10 = precision_5 = recall_5 = 0
+        precision_15 = recall_15 = precision_10 = recall_10 = precision_5 = recall_5 = 0
 
-        if (float(self.TP_20) + self.FP_20) >0:
-            precision_20 = float(self.TP_20) / (float(self.TP_20) + self.FP_20)
+        if (float(self.TP_15) + self.FP_15) >0:
+            precision_15 = float(self.TP_15) / (float(self.TP_15) + self.FP_15)
 
-        if (float(self.TP_20) + self.FN_20) > 0:
-            recall_20 = float(self.TP_20) / (float(self.TP_20) + self.FN_20)
+        if (float(self.TP_15) + self.FN_15) > 0:
+            recall_15 = float(self.TP_15) / (float(self.TP_15) + self.FN_15)
 
         if (float(self.TP_10) + self.FP_10) >0:
             precision_10 = float(self.TP_10) / (float(self.TP_10) + self.FP_10)
@@ -198,10 +202,10 @@ class DopePerformanceGauge:
 
         local_output = ''
         # 20
-        local_output += 'TP_20: {}\n'.format(self.TP_20) + 'FN_20: {}\n'.format(self.FN_20) + \
-                        'FP_20: {}\n'.format(self.FP_20)
-        if precision_20 and recall_20:
-            local_output += 'Precision_20: {}\n'.format(precision_20) + 'Recall_20: {}\n'.format(recall_20) + '\n'
+        local_output += 'TP_15: {}\n'.format(self.TP_15) + 'FN_15: {}\n'.format(self.FN_15) + \
+                        'FP_15: {}\n'.format(self.FP_15)
+        if precision_15 and recall_15:
+            local_output += 'Precision_15: {}\n'.format(precision_15) + 'Recall_15: {}\n'.format(recall_15) + '\n'
 
         # 10
         local_output += 'TP_10: {}\n'.format(self.TP_10) + 'FN_10: {}\n'.format(self.FN_10) + \
@@ -215,13 +219,13 @@ class DopePerformanceGauge:
         if precision_5 and recall_5:
             local_output += 'Precision_5: {}\n'.format(precision_5) + 'Recall_5: {}\n'.format(recall_5) + '\n'
 
-        precision_20 = recall_20 = precision_10 = recall_10 = precision_5 = recall_5 = 0
+        precision_15 = recall_15 = precision_10 = recall_10 = precision_5 = recall_5 = 0
 
-        if (float(self.global_TP_20) + self.global_FP_20) >0:
-            precision_20 = float(self.global_TP_20) / (float(self.global_TP_20) + self.global_FP_20)
+        if (float(self.global_TP_15) + self.global_FP_15) >0:
+            precision_15 = float(self.global_TP_15) / (float(self.global_TP_15) + self.global_FP_15)
 
-        if (float(self.global_TP_20) + self.global_FN_20) > 0:
-            recall_20 = float(self.global_TP_20) / (float(self.global_TP_20) + self.global_FN_20)
+        if (float(self.global_TP_15) + self.global_FN_15) > 0:
+            recall_15 = float(self.global_TP_15) / (float(self.global_TP_15) + self.global_FN_15)
 
         if (float(self.global_TP_10) + self.global_FP_10) >0:
             precision_10 = float(self.global_TP_10) / (float(self.global_TP_10) + self.global_FP_10)
@@ -238,10 +242,10 @@ class DopePerformanceGauge:
 
         global_output = ''
         # 20
-        global_output += 'global_TP_20: {}\n'.format(self.global_TP_20) + 'global_FN_20: {}\n'.format(self.global_FN_20) + \
-                        'global_FP_20: {}\n'.format(self.global_FP_20)
-        if precision_20 and recall_20:
-            global_output += 'Precision_20: {}\n'.format(precision_20) + 'Recall_20: {}\n'.format(recall_20) + '\n'
+        global_output += 'global_TP_15: {}\n'.format(self.global_TP_15) + 'global_FN_15: {}\n'.format(self.global_FN_15) + \
+                        'global_FP_15: {}\n'.format(self.global_FP_15)
+        if precision_15 and recall_15:
+            global_output += 'Precision_15: {}\n'.format(precision_15) + 'Recall_15: {}\n'.format(recall_15) + '\n'
 
         # 10
         global_output += 'global_TP_10: {}\n'.format(self.global_TP_10) + 'global_FN_10: {}\n'.format(self.global_FN_10) + \
@@ -255,6 +259,9 @@ class DopePerformanceGauge:
         if precision_5 and recall_5:
             global_output += 'Precision_5: {}\n'.format(precision_5) + 'Recall_5: {}\n'.format(recall_5) + '\n'
 
+        global_output += '{}/{} received images.\n'.format(self.subscribe_counter, self.publish_counter)
+        global_output += '{}/{} received images processed.'.format(self.processed_images, self.subscribe_counter)
+        global_output += 'lost images: {}'.format(self.lost_images)
 
         filename = self.image_output_dir + '/results.txt'
         if os.path.exists(filename):
@@ -265,7 +272,7 @@ class DopePerformanceGauge:
         with open(filename,append_write) as file:
             file.write(self.current_relative_dir + '\n' + local_output + '\n')
             file.write('Global:\n' + global_output + '\n\n')
-        rospy.loginfo('Saved metric results.')
+        #rospy.loginfo('Saved metric results.')
 
 
 
@@ -283,7 +290,7 @@ class DopePerformanceGauge:
 
 
     def _read_cam_info(self):
-        rospy.loginfo('Read Camera_info..')
+        #rospy.loginfo('Read Camera_info..')
         camera_namespace = rospy.get_param('camera', 'dope/webcam')
         camera_info_url = rospy.get_param('~camera_info_url',
                                           'file:///home/benjamin/catkin_ws/src/dope/config/camera_info_gauge.yaml')
@@ -307,6 +314,8 @@ class DopePerformanceGauge:
         for frame_id, image in self.images.items():
             if frame_id in self.detections and frame_id in self.cuboids:
                 rospy.logdebug('{} is complete!'.format(frame_id))
+                self.processed_images += 1
+                self.lost_images.remove(frame_id)
 
                 #annotation = self.load_annotation_file(frame_id)
                 #gt_cuboids = [object['projected_cuboid'] for object in annotation['objects']]
@@ -333,11 +342,11 @@ class DopePerformanceGauge:
         if not estimated_cuboids:
             self.FN_5 += len(gt_cuboids)
             self.FN_10 += len(gt_cuboids)
-            self.FN_20 += len(gt_cuboids)
+            self.FN_15 += len(gt_cuboids)
             return
 
-        rospy.logdebug('gt_cuboids on frame {}: {}'.format(frame_id, len(gt_cuboids)))
-        rospy.logdebug('estimated_cuboids on frame {}: {}'.format(frame_id, len(estimated_cuboids)))
+        #rospy.logdebug('gt_cuboids on frame {}: {}'.format(frame_id, len(gt_cuboids)))
+        #rospy.logdebug('estimated_cuboids on frame {}: {}'.format(frame_id, len(estimated_cuboids)))
 
         closest_cuboid_list, matrix = self.get_closest_cuboids(gt_cuboids, estimated_cuboids)
 
@@ -364,10 +373,10 @@ class DopePerformanceGauge:
 
             add2d_distance = matrix[estimation_cuboid_id][gt_cuboid_id]
             bounding_box_diameter = self.get_cuboid_2d_diameter(gt_cuboids[gt_cuboid_id])
-            if add2d_distance < (0.2 * bounding_box_diameter):
-                self.TP_20 += 1
+            if add2d_distance < (0.15 * bounding_box_diameter):
+                self.TP_15 += 1
             else:
-                self.FP_20 += 1
+                self.FP_15 += 1
 
             if add2d_distance < (0.1 * bounding_box_diameter):
                 self.TP_10 += 1
@@ -388,24 +397,24 @@ class DopePerformanceGauge:
         # --> there was no estimation for a ground truth cuboid
         for gt_id in range(len(gt_cuboids)):
             if gt_id not in right_value_list:
-                rospy.loginfo('FN: Ground truth cuboid {} was not estimated'.format(gt_id))
+                #rospy.loginfo('FN: Ground truth cuboid {} was not estimated'.format(gt_id))
                 self.FN_5 += 1
                 self.FN_10 += 1
-                self.FN_20 += 1
+                self.FN_15 += 1
         for estimate_id in range(len(estimated_cuboids)):
             if estimate_id not in left_value_list:
-                rospy.loginfo('FP: Estimated cuboid was not assigned to a ground truth (more estimations, than ground truths)')
+                #rospy.loginfo('FP: Estimated cuboid was not assigned to a ground truth (more estimations, than ground truths)')
                 self.FP_5 += 1
                 self.FP_10 += 1
-                self.FP_20 += 1
+                self.FP_15 += 1
 
         #rospy.logdebug('')
         #rospy.logdebug('')
-        #rospy.logdebug('TP_20: {}'.format(self.TP_20))
-        #rospy.logdebug('FN_20: {}'.format(self.FN_20))
-        #rospy.logdebug('FP_20: {}'.format(self.FP_20))
-        #rospy.logdebug('PRECISION_th20: {}'.format(float(self.TP_20) / (float(self.TP_20) + self.FP_20)))
-        #rospy.logdebug('RECALL_th20: {}'.format(float(self.TP_20) / (float(self.TP_20) + self.FN_20)))
+        #rospy.logdebug('TP_15: {}'.format(self.TP_15))
+        #rospy.logdebug('FN_15: {}'.format(self.FN_15))
+        #rospy.logdebug('FP_15: {}'.format(self.FP_15))
+        #rospy.logdebug('PRECISION_th20: {}'.format(float(self.TP_15) / (float(self.TP_15) + self.FP_15)))
+        #rospy.logdebug('RECALL_th20: {}'.format(float(self.TP_15) / (float(self.TP_15) + self.FN_15)))
         #rospy.logdebug('')
         #rospy.logdebug('TP_10: {}'.format(float(self.TP_10)))
         #rospy.logdebug('FN_10: {}'.format(self.FN_10))
@@ -484,7 +493,7 @@ class DopePerformanceGauge:
             final_img = cv2_img
             # Save your OpenCV2 image as a png
             filename = self.image_output_dir + '/' + self.current_relative_dir + '/' + str(image_id) + '.png'
-            rospy.logdebug('Save image to {}'.format(filename))
+            #rospy.logdebug('Save image to {}'.format(filename))
             cv2.imwrite(filename, final_img)
             assert os.path.isfile(filename), 'No file: {}'.format(filename)
             self.rate.sleep()

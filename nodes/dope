@@ -98,6 +98,8 @@ class Draw(object):
 class DopeNode(object):
     """ROS node that listens to image topic, runs DOPE, and publishes DOPE results"""
     def __init__(self):
+        self.images_received = 0
+        self.images_published = 0
         self.pubs = {}
         self.models = {}
         self.pnp_solvers = {}
@@ -162,13 +164,13 @@ class DopeNode(object):
                 rospy.Publisher(
                     '{}/pose_{}'.format(rospy.get_param('~topic_publishing'), model),
                     PoseStamped,
-                    queue_size=10
+                    queue_size=144
                 )
             self.pub_dimension[model] = \
                 rospy.Publisher(
                     '{}/dimension_{}'.format(rospy.get_param('~topic_publishing'), model),
                     String,
-                    queue_size=10
+                    queue_size=144
                 )
 
         # Start ROS publishers
@@ -176,24 +178,24 @@ class DopeNode(object):
             rospy.Publisher(
                 rospy.get_param('~topic_publishing') + "/rgb_points",
                 ImageSensor_msg,
-                queue_size=10
+                queue_size=144
             )
         self.pub_detections = \
             rospy.Publisher(
                 '~detected_objects',
                 Detection3DArray,
-                queue_size=10
+                queue_size=144
             )
         self.pub_markers = \
             rospy.Publisher(
                 '~markers',
                 MarkerArray,
-                queue_size=10
+                queue_size=144
             )
         self.cuboid_array_publisher = \
             rospy.Publisher('/dope/cuboid_array',
                              ProjectedCuboidArray,
-                             queue_size=10)
+                             queue_size=144)
 
         # Start ROS subscriber
         image_sub = message_filters.Subscriber(
@@ -213,6 +215,7 @@ class DopeNode(object):
 
     def image_callback(self, image_msg, camera_info):
         """Image callback"""
+        self.images_received += 1
         rospy.logdebug('Received image {}'.format(image_msg.header.frame_id))
         img = self.cv_bridge.imgmsg_to_cv2(image_msg, "rgb8")
         # cv2.imwrite('img.png', cv2.cvtColor(img, cv2.COLOR_BGR2RGB))  # for debugging
@@ -358,6 +361,8 @@ class DopeNode(object):
         image = CvBridge().cv2_to_imgmsg(np.array(im)[..., ::-1], "bgr8")
         image.header = image_msg.header
         self.pub_rgb_dope_points.publish(image)
+        self.images_published += 1
+        #rospy.logdebug('{}/{}'.format(self.images_published, self.images_received))
         self.pub_detections.publish(detection_array)
         self.cuboid_array_publisher.publish(cuboid_array)
         self.publish_markers(detection_array)
