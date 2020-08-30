@@ -3,7 +3,7 @@
 # Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
 # Full license terms provided in LICENSE.md file.
 
-DATASET_DIR='/media/benjamin/6123-940C/Dataset'
+DATASET_DIR='/media/benjamin/6123-940C1/Dataset'
 
 CONTAINER_NAME=$1
 if [[ -z "${CONTAINER_NAME}" ]]; then
