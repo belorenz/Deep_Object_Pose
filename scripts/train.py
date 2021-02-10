@@ -6,25 +6,6 @@
 
 from __future__ import print_function
 
-######################################################
-"""
-REQUIREMENTS:
-simplejson==3.16.0
-numpy==1.14.1
-opencv_python==3.4.3.18
-horovod==0.13.5
-photutils==0.5
-scipy==1.1.0
-torch==0.4.0
-pyquaternion==0.9.2
-tqdm==4.25.0
-pyrr==0.9.2
-Pillow==5.2.0
-torchvision==0.2.1
-PyYAML==3.13
-"""
-
-######################################################
 """
 HOW TO TRAIN DOPE
 
@@ -49,7 +30,7 @@ after each epoch. It will use the 8 gpus using pytorch data parallel.
 
 
 import argparse
-import ConfigParser
+import configparser as ConfigParser
 import random
 import numpy as np
 
